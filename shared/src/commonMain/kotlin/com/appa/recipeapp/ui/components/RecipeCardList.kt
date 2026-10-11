@@ -1,0 +1,130 @@
+package com.appa.recipeapp.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.appa.recipeapp.data.model.Recipe
+import com.appa.recipeapp.ui.theme.Accent
+import com.appa.recipeapp.ui.theme.SurfaceVariant
+import com.appa.recipeapp.ui.theme.TextPrimary
+import com.appa.recipeapp.ui.theme.TextSecondary
+import org.jetbrains.compose.resources.painterResource
+import recipeapp.shared.generated.resources.Res
+import recipeapp.shared.generated.resources.ic_favorite
+
+@Composable
+fun RecipeCardList(
+    recipe: Recipe,
+    onClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RecipeImage(
+            photoUri = recipe.photoUrls.firstOrNull(),
+            seed = recipe.title,
+            cornerRadius = 12.dp,
+            modifier = Modifier
+                .size(80.dp)
+                .clip(RoundedCornerShape(12.dp)),
+        )
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = recipe.title,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Star,
+                    contentDescription = null,
+                    tint = Accent,
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(3.dp))
+                Text(
+                    text = formatRating(recipe),
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                )
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.End,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(SurfaceVariant)
+                    .clickable(onClick = onFavoriteClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_favorite),
+                    contentDescription = "В избранное",
+                    tint = if (recipe.isFavorite) Accent else TextSecondary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "${recipe.cookingTimeMinutes} мин",
+                color = Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+/**
+ * Форматирует рейтинг из полей view `recipes_with_authors`
+ * (`averageRating`, `ratingsCount`).
+ * Если оценок нет — возвращает "—".
+ */
+private fun formatRating(recipe: Recipe): String {
+    if (recipe.ratingsCount == 0) return "—"
+    val rounded = (recipe.averageRating * 10).toInt() / 10.0
+    return "$rounded (${recipe.ratingsCount})"
+}
