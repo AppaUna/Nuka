@@ -1,11 +1,6 @@
 package com.appa.recipeapp.presentation.editor
 
 import androidx.compose.foundation.Image
-import org.jetbrains.compose.resources.painterResource
-import recipeapp.shared.generated.resources.bg_texture
-import recipeapp.shared.generated.resources.editor_decor
-import coil3.compose.AsyncImage
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,12 +32,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,6 +50,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import com.appa.recipeapp.platform.bytesToImageBitmap
 import com.appa.recipeapp.platform.rememberPhotoPicker
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
@@ -65,11 +61,9 @@ import com.appa.recipeapp.ui.theme.TextPrimary
 import com.appa.recipeapp.ui.theme.TextSecondary
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
-import recipeapp.shared.generated.resources.exit_dialog
 import recipeapp.shared.generated.resources.bg_texture
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import io.github.vinceglb.filekit.PlatformFile
+import recipeapp.shared.generated.resources.editor_decor
+import recipeapp.shared.generated.resources.exit_dialog
 
 @Composable
 fun EditorScreen(
@@ -78,7 +72,6 @@ fun EditorScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    // Пикер фото
     val scope = rememberCoroutineScope()
 
     val photoPicker = rememberPhotoPicker(
@@ -93,15 +86,16 @@ fun EditorScreen(
         }
     )
 
-
     if (state.isLoading) {
-        Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Background),
+            contentAlignment = Alignment.Center,
+        ) {
             CircularProgressIndicator(color = Accent)
         }
         return
     }
 
-    // Экран кропа
     if (state.isCropping && state.croppingFile != null) {
         CropScreen(
             photoFile = state.croppingFile!!,
@@ -112,7 +106,6 @@ fun EditorScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Фоновая текстура приложения
         Image(
             painter = painterResource(Res.drawable.bg_texture),
             contentDescription = null,
@@ -121,7 +114,6 @@ fun EditorScreen(
             modifier = Modifier.matchParentSize(),
         )
 
-        // 2. PNG-декор справа снизу, ПОД контентом
         Image(
             painter = painterResource(Res.drawable.editor_decor),
             contentDescription = null,
@@ -136,11 +128,7 @@ fun EditorScreen(
                 .offset(x = 60.dp, y = 60.dp),
         )
 
-        // 3. Основной контент
-        Column(
-            modifier = Modifier
-                .fillMaxSize(),
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             EditorTopBar(
                 title = state.screenTitle,
                 canSave = state.isValid && !state.isSaving,
@@ -164,6 +152,7 @@ fun EditorScreen(
             ) {
                 PhotoPickerBlock(
                     photoUri = state.photoUri,
+                    photoBytes = state.photoBytes,
                     onClick = { photoPicker.launch() },
                 )
 
@@ -291,9 +280,7 @@ private fun EditorTopBar(
                 CircularProgressIndicator(
                     color = Accent,
                     strokeWidth = 2.dp,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .padding(end = 0.dp),
+                    modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(6.dp))
             }
@@ -314,14 +301,19 @@ private fun EditorTopBar(
 }
 
 // ═══════════════════════════════════════════
-// ФОТО
+// ФОТО (главное)
 // ═══════════════════════════════════════════
 
 @Composable
 private fun PhotoPickerBlock(
     photoUri: String?,
+    photoBytes: ByteArray?,
     onClick: () -> Unit,
 ) {
+    val bitmap = remember(photoBytes) {
+        photoBytes?.let { bytesToImageBitmap(it) }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -341,30 +333,39 @@ private fun PhotoPickerBlock(
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            if (photoUri == null) {
-                // Пустой блок с плюсом
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "+",
-                        color = Accent,
-                        fontSize = 40.sp,
-                        fontWeight = FontWeight.Light,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Добавить фото",
-                        color = TextSecondary,
-                        fontSize = 13.sp,
+            when {
+                bitmap != null -> {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
-            } else {
-                // Реальное фото через Coil
-                AsyncImage(
-                    model = photoUri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                !photoUri.isNullOrBlank() -> {
+                    AsyncImage(
+                        model = photoUri,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                else -> {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "+",
+                            color = Accent,
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.Light,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Добавить фото",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
             }
         }
     }
@@ -441,7 +442,6 @@ private fun TagsSection(
     onNewTagChange: (String) -> Unit,
     onAddNewTag: () -> Unit,
 ) {
-    // Все доступные теги: популярные (не входящие в обязательные) + динамические из БД
     val popularNotRequired = POPULAR_TAGS.filter { it !in REQUIRED_TAGS }
     val dynamicTags = allTags
         .map { it.lowercase() }
@@ -454,7 +454,6 @@ private fun TagsSection(
             .fillMaxWidth()
             .padding(vertical = 8.dp),
     ) {
-        // ─── Обязательные теги ───
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -489,7 +488,6 @@ private fun TagsSection(
 
         Spacer(Modifier.height(16.dp))
 
-        // ─── Остальные теги ───
         Text(
             text = "Дополнительные теги",
             color = TextSecondary,
@@ -516,7 +514,6 @@ private fun TagsSection(
             Spacer(Modifier.height(12.dp))
         }
 
-        // ─── Новый тег ───
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -841,6 +838,7 @@ private fun StepRow(
 
             StepPhotoBlock(
                 photoUri = step.photoUri,
+                photoBytes = step.photoBytes,
                 onClick = onPhotoClick,
             )
         }
@@ -862,47 +860,71 @@ private fun StepRow(
 @Composable
 private fun StepPhotoBlock(
     photoUri: String?,
+    photoBytes: ByteArray?,
     onClick: () -> Unit,
 ) {
-    if (photoUri == null) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Surface.copy(alpha = 0.6f))
-                .border(
-                    width = 1.dp,
-                    color = TextSecondary.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(10.dp),
-                )
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "+", color = Accent, fontSize = 18.sp)
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "Добавить фото к шагу",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
+    val bitmap = remember(photoBytes) {
+        photoBytes?.let { bytesToImageBitmap(it) }
+    }
+
+    when {
+        bitmap != null -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onClick),
+            ) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
-    } else {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(90.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .clickable(onClick = onClick),
-        ) {
-            AsyncImage(
-                model = photoUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+        !photoUri.isNullOrBlank() -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onClick),
+            ) {
+                AsyncImage(
+                    model = photoUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        else -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Surface.copy(alpha = 0.6f))
+                    .border(
+                        width = 1.dp,
+                        color = TextSecondary.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "+", color = Accent, fontSize = 18.sp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Добавить фото к шагу",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
         }
     }
 }

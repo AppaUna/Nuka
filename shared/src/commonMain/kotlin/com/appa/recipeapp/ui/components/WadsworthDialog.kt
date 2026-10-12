@@ -73,10 +73,14 @@ fun WadsworthDialog(
     val playJokeAudio: () -> Unit = {
         scope.launch {
             try {
+                println("DEBUG playJokeAudio: старт, файл=$jokeAudioFile")
                 val bytes = Res.readBytes("files/jokes/$jokeAudioFile")
+                println("DEBUG playJokeAudio: прочитано ${bytes.size} байт")
                 audioPlayer.play(bytes)
+                println("DEBUG playJokeAudio: play вызван")
             } catch (e: Exception) {
-                // Без звука — если файл не найден
+                println("DEBUG playJokeAudio EXCEPTION: ${e::class.simpleName} — ${e.message}")
+                e.printStackTrace()
             }
         }
     }

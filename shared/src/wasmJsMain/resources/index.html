@@ -42,6 +42,56 @@
     <div class="loading">Загрузка Nuka...</div>
 </div>
 
+<script>
+    window.nukaBytes = {
+        buffer: null,
+        init: function(size) {
+            this.buffer = new Uint8Array(size);
+        },
+        set: function(index, value) {
+            this.buffer[index] = value;
+        },
+        toAudioUrl: function() {
+            const blob = new Blob([this.buffer], {type: 'audio/mp4'});
+            return URL.createObjectURL(blob);
+        }
+    };
+</script>
+
+<script>
+    // Разблокировка audio при первом взаимодействии
+    (function() {
+        var unlocked = false;
+        function unlockAudio() {
+            if (unlocked) return;
+            unlocked = true;
+            try {
+                if (!window.__nukaAudio) {
+                    window.__nukaAudio = new Audio();
+                }
+                // Ставим громкость 0 чтобы не слышать
+                window.__nukaAudio.volume = 0;
+                // Используем реальный mp4 из ресурсов приложения
+                window.__nukaAudio.src = '/composeResources/recipeapp.shared.generated.resources/files/jokes/joke_1.mp4';
+                window.__nukaAudio.play().then(function() {
+                    window.__nukaAudio.pause();
+                    window.__nukaAudio.currentTime = 0;
+                    window.__nukaAudio.volume = 1;
+                    console.log('Audio unlocked ✓');
+                }).catch(function(e) {
+                    console.log('Unlock audio error:', e);
+                    window.__nukaAudio.volume = 1;
+                });
+            } catch (e) {
+                console.log('Unlock audio exception:', e);
+            }
+        }
+        document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+        document.addEventListener('click', unlockAudio, { once: true });
+        document.addEventListener('keydown', unlockAudio, { once: true });
+    })();
+</script>
+
 <!-- Скрипт приложения — генерируется webpack как nuka.js -->
 <script src="nuka.js"></script>
 <script>

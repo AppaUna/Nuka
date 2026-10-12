@@ -40,8 +40,12 @@ actual class AudioPlayer actual constructor() {
     }
 
     actual fun stop() {
-        player?.stop()
-        player?.release()
+        try {
+            player?.stop()
+            player?.release()
+        } catch (e: Throwable) {
+            println("DEBUG AudioPlayer.android stop: ${e.message}")
+        }
         player = null
         tempFile?.delete()
         tempFile = null
