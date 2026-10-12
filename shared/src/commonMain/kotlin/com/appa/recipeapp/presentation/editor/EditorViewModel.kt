@@ -8,9 +8,9 @@ import com.appa.recipeapp.data.model.Recipe
 import com.appa.recipeapp.data.model.RecipeStep
 import com.appa.recipeapp.data.repository.RecipeRepository
 import com.appa.recipeapp.data.repository.SupabaseRecipeRepository
-import com.appa.recipeapp.platform.copyUriToCache
 import com.appa.recipeapp.utils.MusicSource
 import com.appa.recipeapp.utils.MusicSourceDetector
+import io.github.vinceglb.filekit.PlatformFile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,8 +34,6 @@ class EditorViewModel(
     private var nextTrackId = 0L
 
     private var pendingStepId: Long? = null
-
-    // Отмена предыдущей задачи подгрузки превью для каждого трека
     private val thumbnailJobs = mutableMapOf<Long, Job>()
 
     init {
@@ -121,10 +119,6 @@ class EditorViewModel(
         _state.value = _state.value.copy(cookingTime = digits)
     }
 
-    fun onPhotoPicked(uri: String) {
-        _state.value = _state.value.copy(photoUri = uri)
-    }
-
     // ─── Ингредиенты ───
 
     fun addIngredient() {
@@ -183,49 +177,32 @@ class EditorViewModel(
 
     fun getPendingStepId(): Long? = pendingStepId
 
-    fun onStepPhotoPicked(uri: String) {
-        val stepId = pendingStepId ?: return
-        _state.value = _state.value.copy(
-            steps = _state.value.steps.map {
-                if (it.id == stepId) it.copy(photoUri = uri) else it
-            },
-        )
-        pendingStepId = null
-    }
-
     // ─── Кроп фото ───
 
-    fun onCropStart(uri: String, stepId: Long? = null) {
-        viewModelScope.launch {
-            val localPath = try {
-                copyUriToCache(uri)
-            } catch (e: Exception) {
-                uri
-            }
-            _state.value = _state.value.copy(
-                isCropping = true,
-                croppingUri = localPath,
-                croppingForStepId = stepId,
-            )
-        }
+    fun onCropStart(file: PlatformFile, stepId: Long? = null) {
+        _state.value = _state.value.copy(
+            isCropping = true,
+            croppingFile = file,
+            croppingForStepId = stepId,
+        )
     }
 
-    fun onCropConfirm(uri: String) {
+    fun onCropConfirm(bytes: ByteArray) {
         val stepId = _state.value.croppingForStepId
         if (stepId == null) {
             _state.value = _state.value.copy(
-                photoUri = uri,
+                photoBytes = bytes,
                 isCropping = false,
-                croppingUri = null,
+                croppingFile = null,
                 croppingForStepId = null,
             )
         } else {
             _state.value = _state.value.copy(
                 steps = _state.value.steps.map {
-                    if (it.id == stepId) it.copy(photoUri = uri) else it
+                    if (it.id == stepId) it.copy(photoBytes = bytes) else it
                 },
                 isCropping = false,
-                croppingUri = null,
+                croppingFile = null,
                 croppingForStepId = null,
             )
         }
@@ -234,7 +211,8 @@ class EditorViewModel(
     fun onCropCancel() {
         _state.value = _state.value.copy(
             isCropping = false,
-            croppingUri = null,
+            croppingFile = null,
+            croppingForStepId = null,
         )
     }
 
@@ -290,39 +268,29 @@ class EditorViewModel(
     }
 
     fun updateMusicTrackUrl(id: Long, url: String) {
-        // Если URL изменился — обнуляем старое превью
         _state.value = _state.value.copy(
             musicTracks = _state.value.musicTracks.map {
                 if (it.id == id) it.copy(url = url, thumbnailUrl = "") else it
             },
         )
-        // Пробуем подгрузить превью (только Spotify)
         tryFetchThumbnail(id, url)
     }
 
     private fun tryFetchThumbnail(trackId: Long, url: String) {
-        // Отменяем предыдущую задачу для этого трека
         thumbnailJobs[trackId]?.cancel()
-
         val source = MusicSourceDetector.detect(url)
         if (source != MusicSource.SPOTIFY) return
 
         thumbnailJobs[trackId] = viewModelScope.launch {
-            // Дебаунс: 500 мс — если пользователь дописывает URL, задача отменится
             delay(500)
-
             val repo = repository as? SupabaseRecipeRepository ?: return@launch
             val thumbnail = repo.fetchThumbnailFor(url)
-
             if (thumbnail != null) {
                 _state.value = _state.value.copy(
                     musicTracks = _state.value.musicTracks.map {
                         if (it.id == trackId) it.copy(thumbnailUrl = thumbnail) else it
                     },
                 )
-                println("DEBUG tryFetchThumbnail: получено превью для trackId=$trackId")
-            } else {
-                println("DEBUG tryFetchThumbnail: не удалось получить превью для trackId=$trackId")
             }
         }
     }
@@ -340,45 +308,70 @@ class EditorViewModel(
     // ─── Сохранение ───
 
     fun save() {
-        println("DEBUG save() ВЫЗВАН")
-        println("DEBUG save(): isValid = ${_state.value.isValid}")
-        println("DEBUG save(): title='${_state.value.title}', time='${_state.value.cookingTime}', ingredients=${_state.value.ingredients.size}, steps=${_state.value.steps.size}, photoUri='${_state.value.photoUri}'")
-
-        if (!_state.value.isValid) {
-            println("DEBUG save(): НЕ ПРОШЁЛ ВАЛИДАЦИЮ — выходим")
-            return
-        }
+        println("DEBUG save() ВЫЗВАН, isValid=${_state.value.isValid}")
+        if (!_state.value.isValid) return
 
         val s = _state.value
         viewModelScope.launch {
             try {
-                val hasLocalPhoto = s.photoUri != null &&
-                        !s.photoUri.startsWith("http://") &&
-                        !s.photoUri.startsWith("https://")
-
+                val hasNewPhoto = s.photoBytes != null
                 _state.value = s.copy(
                     isSaving = true,
-                    saveStatus = if (hasLocalPhoto) SaveStatus.UPLOADING_PHOTO else SaveStatus.SAVING_RECIPE,
+                    saveStatus = if (hasNewPhoto) SaveStatus.UPLOADING_PHOTO else SaveStatus.SAVING_RECIPE,
                 )
+
+                // Получаем репозиторий и сессию
+                val repo = repository as? SupabaseRecipeRepository ?: run {
+                    println("DEBUG save(): repository не SupabaseRecipeRepository")
+                    _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE)
+                    return@launch
+                }
+
+                val session = repo.ensureValidSession() ?: run {
+                    println("DEBUG save(): сессия невалидна")
+                    _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE)
+                    return@launch
+                }
+
+                // ─── Главное фото ───
+                val photoUrls: List<String> = when {
+                    s.photoBytes != null -> {
+                        val url = repo.uploadPhotoBytes(session.accessToken, s.photoBytes)
+                        if (url != null) listOf(url) else emptyList()
+                    }
+                    !s.photoUri.isNullOrBlank() && (s.photoUri.startsWith("http://") || s.photoUri.startsWith("https://")) -> {
+                        listOf(s.photoUri)
+                    }
+                    else -> emptyList()
+                }
+
+                _state.value = _state.value.copy(saveStatus = SaveStatus.SAVING_RECIPE)
+
+                // ─── Шаги с фото ───
+                val steps = mutableListOf<RecipeStep>()
+                for (draft in s.steps.filter { it.text.isNotBlank() }) {
+                    val stepPhotoUrl: String? = when {
+                        draft.photoBytes != null -> {
+                            repo.uploadPhotoBytes(session.accessToken, draft.photoBytes)
+                        }
+                        !draft.photoUri.isNullOrBlank() && (draft.photoUri.startsWith("http://") || draft.photoUri.startsWith("https://")) -> {
+                            draft.photoUri
+                        }
+                        else -> null
+                    }
+                    steps.add(
+                        RecipeStep(
+                            text = draft.text.trim(),
+                            photoUrl = stepPhotoUrl,
+                        )
+                    )
+                }
 
                 val ingredients: List<Ingredient> = s.ingredients
                     .filter { it.name.isNotBlank() }
                     .map { draft ->
                         val parts = splitQuantity(draft.quantity)
-                        Ingredient(
-                            name = draft.name.trim(),
-                            amount = parts.first,
-                            unit = parts.second,
-                        )
-                    }
-
-                val steps = s.steps
-                    .filter { it.text.isNotBlank() }
-                    .map { draft ->
-                        RecipeStep(
-                            text = draft.text.trim(),
-                            photoUrl = draft.photoUri,
-                        )
+                        Ingredient(name = draft.name.trim(), amount = parts.first, unit = parts.second)
                     }
 
                 val musicTracks = s.musicTracks
@@ -400,21 +393,15 @@ class EditorViewModel(
                     ingredients = ingredients,
                     steps = steps,
                     tags = s.selectedTags.toList(),
-                    photoUrls = listOfNotNull(s.photoUri),
+                    photoUrls = photoUrls,
                     cookingTimeMinutes = s.cookingTime.toIntOrNull() ?: 0,
                     musicNote = s.musicNote.trim(),
                     musicTracks = musicTracks,
                     createdAt = 0L,
                 )
 
-                _state.value = _state.value.copy(saveStatus = SaveStatus.SAVING_RECIPE)
-
-                println("DEBUG save(): вызываю repository.addRecipe или updateRecipe...")
-
                 val savedId: String = if (s.recipeId == null) {
-                    val id = repository.addRecipe(recipe)
-                    println("DEBUG save(): addRecipe вернул id='$id'")
-                    id
+                    repository.addRecipe(recipe)
                 } else {
                     repository.updateRecipe(recipe)
                     s.recipeId
@@ -426,20 +413,13 @@ class EditorViewModel(
                     savedRecipeId = savedId,
                 )
 
-                if (savedId.isBlank()) {
-                    println("DEBUG save(): id пустой — НЕ навигируем")
-                    return@launch
+                if (savedId.isNotBlank()) {
+                    onSaveSuccess(savedId)
                 }
-
-                println("DEBUG save(): вызываю onSaveSuccess('$savedId')")
-                onSaveSuccess(savedId)
             } catch (e: Throwable) {
                 println("DEBUG save() EXCEPTION: ${e::class.simpleName} — ${e.message}")
                 e.printStackTrace()
-                _state.value = _state.value.copy(
-                    isSaving = false,
-                    saveStatus = SaveStatus.IDLE,
-                )
+                _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE)
             }
         }
     }

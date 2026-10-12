@@ -67,6 +67,9 @@ import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.exit_dialog
 import recipeapp.shared.generated.resources.bg_texture
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import io.github.vinceglb.filekit.PlatformFile
 
 @Composable
 fun EditorScreen(
@@ -76,14 +79,17 @@ fun EditorScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     // Пикер фото
+    val scope = rememberCoroutineScope()
+
     val photoPicker = rememberPhotoPicker(
-        onPhotoPicked = { uri -> viewModel.onCropStart(uri) }
+        onPhotoPicked = { file ->
+            viewModel.onCropStart(file)
+        }
     )
 
-    // Пикер фото для шагов
     val stepPhotoPicker = rememberPhotoPicker(
-        onPhotoPicked = { uri ->
-            viewModel.onCropStart(uri, viewModel.getPendingStepId())
+        onPhotoPicked = { file ->
+            viewModel.onCropStart(file, viewModel.getPendingStepId())
         }
     )
 
@@ -96,10 +102,10 @@ fun EditorScreen(
     }
 
     // Экран кропа
-    if (state.isCropping && state.croppingUri != null) {
+    if (state.isCropping && state.croppingFile != null) {
         CropScreen(
-            photoUri = state.croppingUri!!,
-            onConfirm = { uri -> viewModel.onCropConfirm(uri) },
+            photoFile = state.croppingFile!!,
+            onConfirm = { bytes -> viewModel.onCropConfirm(bytes) },
             onCancel = { viewModel.onCropCancel() },
         )
         return

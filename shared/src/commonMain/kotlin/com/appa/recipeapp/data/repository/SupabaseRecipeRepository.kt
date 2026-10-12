@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import com.appa.recipeapp.data.model.UserSession
 
 class SupabaseRecipeRepository(
     private val api: SupabaseRecipeApi,
@@ -337,6 +338,30 @@ class SupabaseRecipeRepository(
         return publicUrl
     }
 
+    /**
+     * Загрузка фото из ByteArray (для Web/PWA, где URI недоступен).
+     */
+    suspend fun uploadPhotoBytes(
+        accessToken: String,
+        bytes: ByteArray,
+        ext: String = "jpg",
+    ): String? {
+        val randomName = "${currentTimeMillis()}_${(0..9999).random()}.$ext"
+        val contentType = when (ext) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            else -> "image/jpeg"
+        }
+        println("DEBUG uploadPhotoBytes: загружаем ${bytes.size} байт как $contentType")
+        return storageApi.uploadPhoto(accessToken, randomName, bytes, contentType)
+    }
+
+    /**
+     * Публичный прокси-метод для получения актуальной сессии.
+     * Нужен из EditorViewModel для загрузки фото.
+     */
+    suspend fun ensureValidSession(): UserSession? = authRepository.ensureValidSession()
+
     // ─── Чтение ───
 
     override fun getMainFeed(tags: Set<String>, query: String): Flow<List<Recipe>> =
@@ -544,6 +569,8 @@ class SupabaseRecipeRepository(
             println("DEBUG refreshIfStale: была ошибка — lastRefreshTimeMs не обновляем")
         }
     }
+
+
 
     /**
      * Полная перезагрузка — сбрасывает mainFeed, weekly, sections, favorites.

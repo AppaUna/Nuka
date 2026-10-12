@@ -19,6 +19,16 @@ kotlin {
         }
     }
 
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser {
+            commonWebpackConfig {
+                outputFileName = "nuka.js"
+            }
+        }
+        binaries.executable()
+    }
+
     android {
         namespace = "com.appa.recipeapp.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -53,6 +63,14 @@ kotlin {
             // Ktor для iOS
             implementation(libs.ktor.client.darwin)
         }
+
+        val wasmJsMain by getting {
+            dependencies {
+                implementation(libs.ktor.client.js)
+                implementation(libs.multiplatform.settings.js)
+            }
+        }
+
         commonMain.dependencies {
             // Koin
             implementation(libs.koin.compose)
@@ -84,10 +102,13 @@ kotlin {
 
             implementation(libs.kotlinx.datetime)
 
-            // Crop
-            implementation(libs.crayfish)
+            // Crop — Krop (работает на wasmJs)
+            implementation(libs.krop.ui)
+            implementation(libs.krop.extensions.filekit)
 
             implementation(libs.multiplatform.settings)
+
+            implementation(libs.filekit.dialogs)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

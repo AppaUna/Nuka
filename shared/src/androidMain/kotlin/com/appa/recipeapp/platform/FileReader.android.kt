@@ -5,7 +5,7 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private var appContext: Context? = null
+internal var appContext: Context? = null
 
 /**
  * Вызывается из MainActivity (или из Platform.android.kt).

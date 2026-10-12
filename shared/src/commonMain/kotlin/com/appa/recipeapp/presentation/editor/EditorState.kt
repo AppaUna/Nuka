@@ -1,6 +1,7 @@
 package com.appa.recipeapp.presentation.editor
 
 import com.appa.recipeapp.data.model.Ingredient
+import io.github.vinceglb.filekit.PlatformFile
 
 data class IngredientDraft(
     val id: Long,
@@ -11,7 +12,8 @@ data class IngredientDraft(
 data class StepDraft(
     val id: Long,
     val text: String = "",
-    val photoUri: String? = null,
+    val photoBytes: ByteArray? = null,
+    val photoUri: String? = null,  // для отображения существующих фото из БД
 )
 
 data class MusicTrackDraft(
@@ -40,23 +42,19 @@ enum class SaveStatus {
 
 data class EditorState(
     val recipeId: String? = null,
-    val photoUri: String? = null,
+    val photoUri: String? = null,       // URL существующего фото (из БД) для отображения
+    val photoBytes: ByteArray? = null,  // байты НОВОГО выбранного фото
 
     val isCropping: Boolean = false,
-    val croppingUri: String? = null,
+    val croppingFile: PlatformFile? = null,
     val croppingForStepId: Long? = null,
 
     val title: String = "",
     val description: String = "",
     val cookingTime: String = "",
 
-    val ingredients: List<IngredientDraft> = listOf(
-        IngredientDraft(id = 0L),
-    ),
-
-    val steps: List<StepDraft> = listOf(
-        StepDraft(id = 0L),
-    ),
+    val ingredients: List<IngredientDraft> = listOf(IngredientDraft(id = 0L)),
+    val steps: List<StepDraft> = listOf(StepDraft(id = 0L)),
 
     val allTags: List<String> = emptyList(),
     val selectedTags: Set<String> = emptySet(),
@@ -93,9 +91,9 @@ data class EditorState(
                 selectedTags.isNotEmpty() ||
                 musicNote.isNotBlank() ||
                 musicTracks.any { it.url.isNotBlank() } ||
+                photoBytes != null ||
                 photoUri != null
 
-    /** Текст статуса — для отображения на кнопке. */
     val saveStatusText: String
         get() = when (saveStatus) {
             SaveStatus.IDLE -> "Сохранить"

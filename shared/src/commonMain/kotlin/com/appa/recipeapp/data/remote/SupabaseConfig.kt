@@ -11,7 +11,7 @@ package com.appa.recipeapp.data.remote
  * на сервере контролируют доступ к данным.
  */
 object SupabaseConfig {
-    const val BASE_URL = "https://77.51.179.215:8444"
+    val BASE_URL: String = com.appa.recipeapp.platform.getSupabaseBaseUrl()
     const val ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNTU2NTk3LCJleHAiOjIxMDY5MTY1OTd9.7uo_yuo7gtD0UqStd4TKbjee1lhHkz_lCSLmBRCTgyI"
 
     /** Endpoint-ы */

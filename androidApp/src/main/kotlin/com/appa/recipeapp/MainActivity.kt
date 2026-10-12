@@ -9,9 +9,10 @@ import androidx.core.view.WindowCompat
 import com.appa.recipeapp.platform.initAudioPlayer
 import com.appa.recipeapp.platform.initFileCopier
 import com.appa.recipeapp.platform.initFileReader
-import com.appa.recipeapp.platform.initImageSaver
 import com.appa.recipeapp.platform.initSettings
 import com.appa.recipeapp.platform.initImageLoaderFactory
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.dialogs.init
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,7 +21,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        initImageSaver(this)
+        FileKit.init(this)
+
         initFileCopier(this)
         initSettings(this)
         initAudioPlayer(this)

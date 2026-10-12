@@ -1,28 +1,24 @@
 package com.appa.recipeapp.platform
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.dialogs.FileKitType
+import io.github.vinceglb.filekit.dialogs.openFilePicker
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 
 @Composable
 actual fun rememberPhotoPicker(
-    onPhotoPicked: (String) -> Unit,
+    onPhotoPicked: (io.github.vinceglb.filekit.PlatformFile) -> Unit,
 ): PhotoPickerLauncher {
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        uri?.let { onPhotoPicked(it.toString()) }
-    }
-
     return remember {
         object : PhotoPickerLauncher {
             override fun launch() {
-                launcher.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
+                MainScope().launch {
+                    val file = FileKit.openFilePicker(type = FileKitType.Image)
+                    file?.let { onPhotoPicked(it) }
+                }
             }
         }
     }

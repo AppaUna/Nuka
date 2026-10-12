@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,7 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -72,10 +73,6 @@ fun AuthScreen(viewModel: AuthViewModel) {
     // FocusManager — для снятия фокуса при тапе по пустому месту и смене режима
     val focusManager = LocalFocusManager.current
 
-    val configuration = LocalConfiguration.current
-    val screenWidthPx = configuration.screenWidthDp * 3f
-    val screenHeightPx = configuration.screenHeightDp * 3f
-
     // ─── Анимация: свечение блуждает по экрану ───
     val infinite = rememberInfiniteTransition(label = "authGlow")
 
@@ -97,9 +94,6 @@ fun AuthScreen(viewModel: AuthViewModel) {
     val normY = (cos(t * 1f) * 0.35f + cos(t * 3f) * 0.15f + 0.5f)
         .coerceIn(0f, 1f)
 
-    val centerX = normX * screenWidthPx
-    val centerY = normY * screenHeightPx
-
     // Тусклое мерцание — ярче/тусклее
     val flickerAlpha by infinite.animateFloat(
         initialValue = 0.05f,
@@ -111,7 +105,7 @@ fun AuthScreen(viewModel: AuthViewModel) {
         label = "flickerAlpha",
     )
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
@@ -120,6 +114,13 @@ fun AuthScreen(viewModel: AuthViewModel) {
                 })
             },
     ) {
+        // ─── Размеры экрана в пикселях — кросс-платформенно ───
+        val density = LocalDensity.current
+        val screenWidthPx = with(density) { maxWidth.toPx() }
+        val screenHeightPx = with(density) { maxHeight.toPx() }
+
+        val centerX = normX * screenWidthPx
+        val centerY = normY * screenHeightPx
 
         // ─── ФОН: глобальный bg_texture из App.kt, без затемнения ───
 
