@@ -8,9 +8,9 @@ val Surface = Color(0xFF1A1A1D)
 val SurfaceVariant = Color(0xFF242428)
 
 // Акцент
-val Accent = Color(0xFFF5A623)
-val AccentPressed = Color(0xFFD98E15)
-val AccentSoft = Color(0x33F5A623)   // полупрозрачный акцент для фонов чипов
+val Accent = Color(0xFF80E5B0)
+val AccentPressed = Color(0xFF5FC99A)
+val AccentSoft = Color(0x3380E5B0)   // полупрозрачный акцент для фонов чипов
 
 // Текст
 val TextPrimary = Color(0xFFF5F5F5)
