@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,8 +32,7 @@ import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.TextPrimary
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
+import recipeapp.shared.generated.resources.ic_timer
 
 @Composable
 fun RecipeCardMedium(
@@ -68,7 +69,6 @@ fun RecipeCardMedium(
                 ),
         )
 
-        // Автор сверху справа
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -91,18 +91,27 @@ fun RecipeCardMedium(
             )
         }
 
-        // Инфо внизу
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(10.dp),
         ) {
-            Text(
-                text = "${recipe.cookingTimeMinutes} мин",
-                color = Accent,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            // ⏱ Время с иконкой таймера
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_timer),
+                    contentDescription = null,
+                    tint = Accent,
+                    modifier = Modifier.size(11.dp),
+                )
+                Spacer(Modifier.width(3.dp))
+                Text(
+                    text = "${recipe.cookingTimeMinutes} мин",
+                    color = Accent,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
             Spacer(Modifier.height(2.dp))
             Text(
                 text = recipe.title,

@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,8 +34,7 @@ import com.appa.recipeapp.ui.theme.TextPrimary
 import com.appa.recipeapp.ui.theme.TextSecondary
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
+import recipeapp.shared.generated.resources.ic_timer
 
 @Composable
 fun RecipeCardLarge(
@@ -53,7 +55,6 @@ fun RecipeCardLarge(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Тёмная подложка снизу
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -70,7 +71,6 @@ fun RecipeCardLarge(
                 ),
         )
 
-        // Автор — слева сверху
         Row(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -93,18 +93,27 @@ fun RecipeCardLarge(
             )
         }
 
-        // Инфо внизу
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(14.dp),
         ) {
-            Text(
-                text = "${recipe.cookingTimeMinutes} мин",
-                color = Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            // ⏱ Время с иконкой таймера
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_timer),
+                    contentDescription = null,
+                    tint = Accent,
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "${recipe.cookingTimeMinutes} мин",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
             Spacer(Modifier.height(4.dp))
             Text(
                 text = recipe.title,

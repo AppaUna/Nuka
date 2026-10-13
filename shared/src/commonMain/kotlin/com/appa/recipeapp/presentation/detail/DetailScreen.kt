@@ -63,6 +63,9 @@ import com.appa.recipeapp.ui.components.SkeletonDetailContent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import kotlinx.datetime.Clock
+import org.jetbrains.compose.resources.painterResource
+import recipeapp.shared.generated.resources.Res
+import recipeapp.shared.generated.resources.ic_timer
 
 
 @Composable
@@ -286,11 +289,20 @@ private fun TitleCard(recipe: Recipe) {
 
             MetricDivider()
 
-            Text(
-                text = "${recipe.cookingTimeMinutes} мин",
-                color = TextSecondary,
-                fontSize = 13.sp,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_timer),
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "${recipe.cookingTimeMinutes} мин",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                )
+            }
         }
 
         if (recipe.tags.isNotEmpty()) {
