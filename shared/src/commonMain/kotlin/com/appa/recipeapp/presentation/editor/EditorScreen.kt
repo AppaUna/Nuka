@@ -55,6 +55,7 @@ import com.appa.recipeapp.platform.bytesToImageBitmap
 import com.appa.recipeapp.platform.rememberPhotoPicker
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
+import com.appa.recipeapp.ui.theme.Error
 import com.appa.recipeapp.ui.theme.Surface
 import com.appa.recipeapp.ui.theme.SurfaceVariant
 import com.appa.recipeapp.ui.theme.TextPrimary
@@ -162,6 +163,7 @@ fun EditorScreen(
                     onValueChange = viewModel::onTitleChange,
                     placeholder = "Введи название рецепта...",
                     singleLine = true,
+                    isRequired = true,
                 )
 
                 TagsSection(
@@ -188,6 +190,7 @@ fun EditorScreen(
                     onValueChange = viewModel::onCookingTimeChange,
                     placeholder = "30",
                     singleLine = true,
+                    isRequired = true,
                 )
 
                 IngredientsSection(
@@ -383,17 +386,28 @@ private fun EditorField(
     placeholder: String,
     singleLine: Boolean,
     minHeight: androidx.compose.ui.unit.Dp = 48.dp,
+    isRequired: Boolean = false,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Text(
-            text = label,
-            color = TextSecondary,
-            fontSize = 13.sp,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                color = TextSecondary,
+                fontSize = 13.sp,
+            )
+            if (isRequired) {
+                Text(
+                    text = " *",
+                    color = Error,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
@@ -464,6 +478,12 @@ private fun TagsSection(
                 text = "Приём пищи",
                 color = TextSecondary,
                 fontSize = 13.sp,
+            )
+            Text(
+                text = " *",
+                color = Error,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.width(8.dp))
             Text(
@@ -597,12 +617,22 @@ private fun IngredientsSection(
             .fillMaxWidth()
             .padding(top = 16.dp),
     ) {
-        Text(
-            text = "Ингредиенты",
-            color = TextSecondary,
-            fontSize = 13.sp,
+        Row(
             modifier = Modifier.padding(horizontal = 16.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Ингредиенты",
+                color = TextSecondary,
+                fontSize = 13.sp,
+            )
+            Text(
+                text = " *",
+                color = Error,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Spacer(Modifier.height(8.dp))
 
         ingredients.forEach { ingredient ->
@@ -731,12 +761,22 @@ private fun StepsSection(
             .fillMaxWidth()
             .padding(top = 16.dp),
     ) {
-        Text(
-            text = "Приготовление",
-            color = TextSecondary,
-            fontSize = 13.sp,
+        Row(
             modifier = Modifier.padding(horizontal = 16.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Приготовление",
+                color = TextSecondary,
+                fontSize = 13.sp,
+            )
+            Text(
+                text = " *",
+                color = Error,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Spacer(Modifier.height(8.dp))
 
         steps.forEachIndexed { index, step ->

@@ -106,7 +106,12 @@ class DetailViewModel(
 
             repository.addOrUpdateRating(recipe.id, rating)
 
-            _state.value = _state.value.copy(isSubmitting = false)
+            // Очищаем черновик после успешного сохранения
+            _state.value = _state.value.copy(
+                isSubmitting = false,
+                draftStars = 0,
+                draftComment = "",
+            )
             refreshRatingsOnly()
         }
     }
