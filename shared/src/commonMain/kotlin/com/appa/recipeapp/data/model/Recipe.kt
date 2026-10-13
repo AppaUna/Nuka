@@ -48,6 +48,7 @@ data class Recipe(
     val isFavorite: Boolean = false,
     val musicNote: String = "",
     val musicTracks: List<MusicTrack> = emptyList(),
+    val notes: String = "",
     /** Средний рейтинг из view `recipes_with_authors`. 0.0 если оценок нет. */
     val averageRating: Double = 0.0,
     /** Количество оценок из view `recipes_with_authors`. 0 если нет. */

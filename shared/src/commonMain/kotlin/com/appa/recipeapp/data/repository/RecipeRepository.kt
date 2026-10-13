@@ -41,4 +41,6 @@ interface RecipeRepository {
      * Если пользователь уже оценивал — старая запись заменяется.
      */
     suspend fun addOrUpdateRating(recipeId: String, rating: Rating)
+
+    suspend fun deleteRating(recipeId: String, userId: String)
 }

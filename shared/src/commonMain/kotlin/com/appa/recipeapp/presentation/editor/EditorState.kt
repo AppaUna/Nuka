@@ -1,6 +1,5 @@
 package com.appa.recipeapp.presentation.editor
 
-import com.appa.recipeapp.data.model.Ingredient
 import io.github.vinceglb.filekit.PlatformFile
 
 data class IngredientDraft(
@@ -63,6 +62,8 @@ data class EditorState(
     val musicNote: String = "",
     val musicTracks: List<MusicTrackDraft> = emptyList(),
 
+    val notes: String = "",
+
     val showExitDialog: Boolean = false,
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -91,6 +92,7 @@ data class EditorState(
                 selectedTags.isNotEmpty() ||
                 musicNote.isNotBlank() ||
                 musicTracks.any { it.url.isNotBlank() } ||
+                notes.isNotBlank() ||
                 photoBytes != null ||
                 photoUri != null
 

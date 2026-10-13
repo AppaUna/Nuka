@@ -95,6 +95,7 @@ class EditorViewModel(
                             thumbnailUrl = track.thumbnailUrl,
                         )
                     },
+                    notes = recipe.notes,
                     isLoading = false,
                 )
                 nextIngredientId = (recipe.ingredients.size).toLong()
@@ -117,6 +118,10 @@ class EditorViewModel(
     fun onCookingTimeChange(text: String) {
         val digits = text.filter { it.isDigit() }
         _state.value = _state.value.copy(cookingTime = digits)
+    }
+
+    fun onNotesChange(text: String) {
+        _state.value = _state.value.copy(notes = text)
     }
 
     // ─── Ингредиенты ───
@@ -213,6 +218,25 @@ class EditorViewModel(
             isCropping = false,
             croppingFile = null,
             croppingForStepId = null,
+        )
+    }
+
+    /** Удалить главное фото (сброс photoBytes и photoUri). */
+    fun removeMainPhoto() {
+        println("DEBUG removeMainPhoto ВЫЗВАН")
+        _state.value = _state.value.copy(
+            photoBytes = null,
+            photoUri = null,
+        )
+        println("DEBUG removeMainPhoto: photoBytes=${_state.value.photoBytes}, photoUri=${_state.value.photoUri}")
+    }
+
+    /** Удалить фото у шага. */
+    fun removeStepPhoto(stepId: Long) {
+        _state.value = _state.value.copy(
+            steps = _state.value.steps.map {
+                if (it.id == stepId) it.copy(photoBytes = null, photoUri = null) else it
+            },
         )
     }
 
@@ -320,7 +344,6 @@ class EditorViewModel(
                     saveStatus = if (hasNewPhoto) SaveStatus.UPLOADING_PHOTO else SaveStatus.SAVING_RECIPE,
                 )
 
-                // Получаем репозиторий и сессию
                 val repo = repository as? SupabaseRecipeRepository ?: run {
                     println("DEBUG save(): repository не SupabaseRecipeRepository")
                     _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE)
@@ -342,7 +365,10 @@ class EditorViewModel(
                     !s.photoUri.isNullOrBlank() && (s.photoUri.startsWith("http://") || s.photoUri.startsWith("https://")) -> {
                         listOf(s.photoUri)
                     }
-                    else -> emptyList()
+                    else -> {
+                        // Фото удалено — отправляем пустую строку, чтобы PostgREST обновил
+                        if (s.recipeId != null) listOf("") else emptyList()
+                    }
                 }
 
                 _state.value = _state.value.copy(saveStatus = SaveStatus.SAVING_RECIPE)
@@ -359,12 +385,7 @@ class EditorViewModel(
                         }
                         else -> null
                     }
-                    steps.add(
-                        RecipeStep(
-                            text = draft.text.trim(),
-                            photoUrl = stepPhotoUrl,
-                        )
-                    )
+                    steps.add(RecipeStep(text = draft.text.trim(), photoUrl = stepPhotoUrl))
                 }
 
                 val ingredients: List<Ingredient> = s.ingredients
@@ -397,6 +418,7 @@ class EditorViewModel(
                     cookingTimeMinutes = s.cookingTime.toIntOrNull() ?: 0,
                     musicNote = s.musicNote.trim(),
                     musicTracks = musicTracks,
+                    notes = s.notes.trim(),
                     createdAt = 0L,
                 )
 

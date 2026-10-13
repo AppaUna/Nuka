@@ -116,6 +116,27 @@ class DetailViewModel(
         }
     }
 
+    /** Удалить свою оценку. */
+    fun deleteMyRating() {
+        val s = _state.value
+        val recipe = s.recipe ?: return
+        val myId = authRepository.getUserId()
+        if (myId.isBlank()) return
+
+        viewModelScope.launch {
+            _state.value = s.copy(isSubmitting = true)
+
+            repository.deleteRating(recipe.id, myId)
+
+            _state.value = _state.value.copy(
+                isSubmitting = false,
+                draftStars = 0,
+                draftComment = "",
+            )
+            refreshRatingsOnly()
+        }
+    }
+
     private fun refreshRatingsOnly() {
         viewModelScope.launch {
             val repo = repository as? SupabaseRecipeRepository ?: return@launch

@@ -518,6 +518,18 @@ class SupabaseRecipeRepository(
         println("DEBUG addOrUpdateRating: оценка сохранена recipe=$recipeId")
     }
 
+    override suspend fun deleteRating(recipeId: String, userId: String) {
+        val session = authRepository.ensureValidSession() ?: return
+
+        val ok = api.deleteRating(session.accessToken, recipeId, userId)
+        if (ok) {
+            refreshWeeklySuspend()
+            println("DEBUG deleteRating: оценка удалена recipe=$recipeId")
+        } else {
+            println("DEBUG deleteRating: не удалось удалить")
+        }
+    }
+
     suspend fun getMyRatingsCount(): Int {
         val session = authRepository.ensureValidSession() ?: return 0
         return api.getMyRatingsCount(session.accessToken, session.userId)

@@ -11,6 +11,7 @@ import com.appa.recipeapp.platform.initFileCopier
 import com.appa.recipeapp.platform.initFileReader
 import com.appa.recipeapp.platform.initSettings
 import com.appa.recipeapp.platform.initImageLoaderFactory
+import com.appa.recipeapp.platform.initUrlOpener
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
 
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
         initAudioPlayer(this)
         initFileReader(this)
         initImageLoaderFactory(this)
+        initUrlOpener(this)
 
         WindowCompat.getInsetsController(window, window.decorView)
             .isAppearanceLightStatusBars = false

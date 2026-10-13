@@ -30,6 +30,7 @@ data class RecipeDto(
     val musicNote: String = "",
     @SerialName("music_tracks")
     val musicTracks: JsonElement? = null,
+    val notes: String = "",
     @SerialName("created_at")
     val createdAt: String? = null,
     @SerialName("avg_rating")
@@ -57,6 +58,7 @@ data class RecipeInsertDto(
     val musicNote: String,
     @SerialName("music_tracks")
     val musicTracks: List<MusicTrack>,
+    val notes: String = "",
 )
 
 @Serializable
@@ -69,11 +71,12 @@ data class RecipeUpdateDto(
     val steps: List<RecipeStep>,
     val tags: List<String>,
     @SerialName("photo_url")
-    val photoUrl: String? = null,
+    val photoUrl: String = "",
     @SerialName("music_note")
     val musicNote: String,
     @SerialName("music_tracks")
     val musicTracks: List<MusicTrack>,
+    val notes: String = "",
 )
 
 @Serializable
@@ -109,6 +112,7 @@ fun RecipeDto.toDomain(favoriteIds: Set<String> = emptySet()): Recipe = Recipe(
     isFavorite = id in favoriteIds,
     musicNote = musicNote,
     musicTracks = parseMusicTracks(musicTracks),
+    notes = notes,
     averageRating = avgRating,
     ratingsCount = ratingsCount,
     popularityScore = popularityScore,
@@ -125,6 +129,7 @@ fun Recipe.toInsertDto(authorId: String): RecipeInsertDto = RecipeInsertDto(
     photoUrl = photoUrls.firstOrNull(),
     musicNote = musicNote,
     musicTracks = musicTracks,
+    notes = notes,
 )
 
 fun Recipe.toUpdateDto(): RecipeUpdateDto = RecipeUpdateDto(
@@ -134,9 +139,10 @@ fun Recipe.toUpdateDto(): RecipeUpdateDto = RecipeUpdateDto(
     ingredients = ingredients,
     steps = steps,
     tags = tags,
-    photoUrl = photoUrls.firstOrNull(),
+    photoUrl = photoUrls.firstOrNull() ?: "",   // ← пустая строка, если нет фото
     musicNote = musicNote,
     musicTracks = musicTracks,
+    notes = notes,
 )
 
 private fun parseIngredients(element: JsonElement?): List<Ingredient> {

@@ -39,7 +39,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalUriHandler
+import com.appa.recipeapp.platform.openExternalUrl
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +53,7 @@ import com.appa.recipeapp.ui.components.RecipeImage
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
 import com.appa.recipeapp.ui.theme.DividerColor
+import com.appa.recipeapp.ui.theme.Error
 import com.appa.recipeapp.ui.theme.Surface
 import com.appa.recipeapp.ui.theme.SurfaceVariant
 import com.appa.recipeapp.ui.theme.TextPrimary
@@ -67,14 +68,12 @@ import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.ic_timer
 
-
 @Composable
 fun DetailScreen(
     viewModel: DetailViewModel,
     onBackClick: () -> Unit,
     onEditClick: (String) -> Unit = {},
 ) {
-    // ─── ДИАГНОСТИКА ───
     val compositionTime = remember { Clock.System.now().toEpochMilliseconds() }
     LaunchedEffect(Unit) {
         println("DEBUG DetailScreen: composition+firstFrame ${Clock.System.now().toEpochMilliseconds() - compositionTime} мс, vmHash=${viewModel.hashCode()}")
@@ -131,6 +130,7 @@ fun DetailScreen(
                     }
                 }
 
+                // ⚠️ Заметки — ПОД музыкой (перенесено)
                 item {
                     if (recipe.musicNote.isNotBlank() || recipe.musicTracks.isNotEmpty()) {
                         SectionBlock(title = "Музыка для готовки") {
@@ -138,6 +138,19 @@ fun DetailScreen(
                         }
                     } else {
                         Spacer(Modifier.height(0.dp))
+                    }
+                }
+
+                if (recipe.notes.isNotBlank()) {
+                    item {
+                        SectionBlock(title = "Заметки") {
+                            Text(
+                                text = recipe.notes,
+                                color = TextSecondary,
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                            )
+                        }
                     }
                 }
 
@@ -150,6 +163,7 @@ fun DetailScreen(
                             onStarsChange = viewModel::onStarsChange,
                             onCommentChange = viewModel::onCommentChange,
                             onSubmit = viewModel::submitRating,
+                            onDelete = viewModel::deleteMyRating,
                         )
                     }
                 }
@@ -209,7 +223,6 @@ private fun TopPhotoBlock(
                 .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Кнопка «Редактировать» — только для своих рецептов
             if (isMyRecipe) {
                 CircleButton(onClick = onEditClick) {
                     Icon(
@@ -496,7 +509,6 @@ private fun StepsList(recipe: Recipe) {
 
 @Composable
 private fun MusicBlock(recipe: Recipe) {
-    val uriHandler = LocalUriHandler.current
 
     Column {
         if (recipe.musicNote.isNotBlank()) {
@@ -519,13 +531,12 @@ private fun MusicBlock(recipe: Recipe) {
                         .background(Surface)
                         .clickable {
                             if (track.url.isNotBlank()) {
-                                uriHandler.openUri(track.url)
+                                openExternalUrl(track.url)
                             }
                         }
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Превью плейлиста (если есть) — иначе иконка ноты
                     if (track.thumbnailUrl.isNotBlank()) {
                         AsyncImage(
                             model = track.thumbnailUrl,
@@ -577,6 +588,7 @@ private fun ReviewsBlock(
     onStarsChange: (Int) -> Unit,
     onCommentChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Column {
         Text(
@@ -631,20 +643,42 @@ private fun ReviewsBlock(
 
         val canSubmit = draftStars > 0
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.End)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (canSubmit) Accent else SurfaceVariant)
-                .clickable(enabled = canSubmit) { onSubmit() }
-                .padding(horizontal = 20.dp, vertical = 10.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "Сохранить",
-                color = if (canSubmit) Background else TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            if (draftStars > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(enabled = canSubmit) { onDelete() }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        text = "Удалить отзыв",
+                        color = Error,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (canSubmit) Accent else SurfaceVariant)
+                    .clickable(enabled = canSubmit) { onSubmit() }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    text = "Сохранить",
+                    color = if (canSubmit) Background else TextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))

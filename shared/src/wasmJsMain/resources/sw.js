@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nuka-v1';
+const CACHE_NAME = 'nuka-v2';
 const URLS_TO_CACHE = [
     '/',
     '/index.html',

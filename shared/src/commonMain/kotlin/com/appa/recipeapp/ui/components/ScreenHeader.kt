@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -21,7 +22,7 @@ import com.appa.recipeapp.ui.theme.TextSecondary
 
 /**
  * Единый заголовок экрана — используется на Home, Favorites, Profile.
- * Гарантирует одинаковую высоту и отступы на всех экранах.
+ * Высота адаптивная — subtitle не пропадает, даже если title длинный.
  */
 @Composable
 fun ScreenHeader(
@@ -35,15 +36,14 @@ fun ScreenHeader(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .padding(top = topPadding, bottom = 16.dp)
-            .height(56.dp),
+            .padding(top = topPadding, bottom = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
             modifier = Modifier
                 .weight(1f)
-                .height(56.dp),
+                .padding(end = 12.dp),
             verticalArrangement = Arrangement.Top,
         ) {
             Text(
@@ -51,6 +51,8 @@ fun ScreenHeader(
                 color = TextPrimary,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
                 Spacer(Modifier.height(4.dp))

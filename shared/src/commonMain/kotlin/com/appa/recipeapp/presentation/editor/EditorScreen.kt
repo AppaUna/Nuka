@@ -155,6 +155,7 @@ fun EditorScreen(
                     photoUri = state.photoUri,
                     photoBytes = state.photoBytes,
                     onClick = { photoPicker.launch() },
+                    onRemove = { viewModel.removeMainPhoto() },
                 )
 
                 EditorField(
@@ -210,6 +211,16 @@ fun EditorScreen(
                         viewModel.onStepPhotoClicked(stepId)
                         stepPhotoPicker.launch()
                     },
+                    onPhotoRemove = { stepId -> viewModel.removeStepPhoto(stepId) },
+                )
+
+                EditorField(
+                    label = "Заметки",
+                    value = state.notes,
+                    onValueChange = viewModel::onNotesChange,
+                    placeholder = "Запиши что ещё требует упоминания",
+                    singleLine = false,
+                    minHeight = 80.dp,
                 )
 
                 MusicSection(
@@ -312,10 +323,13 @@ private fun PhotoPickerBlock(
     photoUri: String?,
     photoBytes: ByteArray?,
     onClick: () -> Unit,
+    onRemove: () -> Unit,
 ) {
+    // Байты → ImageBitmap (работает на Android + Web через CMP API)
     val bitmap = remember(photoBytes) {
         photoBytes?.let { bytesToImageBitmap(it) }
     }
+    val hasPhoto = bitmap != null || !photoUri.isNullOrBlank()
 
     Column(
         modifier = Modifier
@@ -368,6 +382,29 @@ private fun PhotoPickerBlock(
                             fontSize = 13.sp,
                         )
                     }
+                }
+            }
+        }
+
+        if (hasPhoto) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Error.copy(alpha = 0.1f))
+                        .clickable(onClick = onRemove)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = "✕ Удалить фото",
+                        color = Error,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
                 }
             }
         }
@@ -755,6 +792,7 @@ private fun StepsSection(
     onRemove: (Long) -> Unit,
     onTextChange: (Long, String) -> Unit,
     onPhotoClick: (Long) -> Unit,
+    onPhotoRemove: (Long) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -786,6 +824,7 @@ private fun StepsSection(
                 onTextChange = { text -> onTextChange(step.id, text) },
                 onRemove = { onRemove(step.id) },
                 onPhotoClick = { onPhotoClick(step.id) },
+                onPhotoRemove = { onPhotoRemove(step.id) },
             )
         }
 
@@ -819,6 +858,7 @@ private fun StepRow(
     onTextChange: (String) -> Unit,
     onRemove: () -> Unit,
     onPhotoClick: () -> Unit,
+    onPhotoRemove: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -880,6 +920,7 @@ private fun StepRow(
                 photoUri = step.photoUri,
                 photoBytes = step.photoBytes,
                 onClick = onPhotoClick,
+                onRemove = onPhotoRemove,
             )
         }
 
@@ -902,42 +943,61 @@ private fun StepPhotoBlock(
     photoUri: String?,
     photoBytes: ByteArray?,
     onClick: () -> Unit,
+    onRemove: () -> Unit,
 ) {
     val bitmap = remember(photoBytes) {
         photoBytes?.let { bytesToImageBitmap(it) }
     }
+    val hasPhoto = bitmap != null || !photoUri.isNullOrBlank()
 
     when {
-        bitmap != null -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(90.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onClick),
-            ) {
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-        !photoUri.isNullOrBlank() -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(90.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onClick),
-            ) {
-                AsyncImage(
-                    model = photoUri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
+        hasPhoto -> {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(90.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onClick),
+                ) {
+                    when {
+                        bitmap != null -> {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        !photoUri.isNullOrBlank() -> {
+                            AsyncImage(
+                                model = photoUri,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Error.copy(alpha = 0.1f))
+                            .clickable(onClick = onRemove)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "✕ Удалить",
+                            color = Error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
             }
         }
         else -> {
@@ -1252,7 +1312,7 @@ private fun OutlinedDialogButton(
                 Color.White.copy(alpha = 0.25f),
                 Color.Gray.copy(alpha = 0.10f),
                 Color.White.copy(alpha = 0.25f),
-            ),
+            )
         )
     }
 

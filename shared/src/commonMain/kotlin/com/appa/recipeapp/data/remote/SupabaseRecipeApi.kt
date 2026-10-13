@@ -357,6 +357,31 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
         }
     }
 
+    /**
+     * Удалить оценку текущего пользователя у рецепта.
+     * Возвращает true при успехе
+     */
+    suspend fun deleteRating(accessToken: String, recipeId: String, userId: String): Boolean {
+        return try {
+            val response: HttpResponse = client.http.delete(
+                "${SupabaseConfig.BASE_URL}${SupabaseConfig.REST_PATH}/ratings",
+            ) {
+                parameter("recipe_id", "eq.$recipeId")
+                parameter("user_id", "eq.$userId")
+                headers {
+                    client.authHeaders(accessToken).forEach { (key, value) -> header(key, value) }
+                }
+            }
+            val bodyText = try { response.body<String>() } catch (e: Throwable) { "<no body>" }
+            println("DEBUG deleteRating: status=${response.status}, body=$bodyText")
+            // 200/204 — успех, 404 — оценки и не было (тоже ок)
+            response.status.value in 200..299 || response.status.value == 404
+        } catch (e: Throwable) {
+            println("DEBUG deleteRating EXCEPTION: ${e::class.simpleName} — ${e.message}")
+            false
+        }
+    }
+
     suspend fun fetchSpotifyThumbnail(spotifyUrl: String): String? {
         return try {
             val response: HttpResponse = client.http.get(

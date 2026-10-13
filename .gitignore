@@ -24,3 +24,10 @@ node_modules/
 keystore.properties
 
 kotlin-js-store/
+
+*.apk
+*.aab
+*.ap_
+*.dex
+*.wasm
+nuka.js*
