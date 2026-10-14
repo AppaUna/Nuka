@@ -61,12 +61,29 @@ import com.appa.recipeapp.ui.theme.TextSecondary
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import com.appa.recipeapp.ui.components.SkeletonDetailContent
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import kotlinx.datetime.Clock
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.ic_timer
+
+/**
+ * URL фото для DETAIL-экрана — оригинал, без transform.
+ *
+ * Логика: RecipeDto уже применил transform (512px) для превью в карточках.
+ * Для Detail нам нужен оригинал. Обратно к оригиналу можно вернуться,
+ * если убрать render-параметры.
+ *
+ * Работает только для Supabase Storage URL. Для остальных — возвращает как есть.
+ */
+private fun detailPhotoUrl(url: String?): String? {
+    if (url.isNullOrBlank()) return url
+
+    // Если URL уже render-вариант — убираем query-параметры,
+    // но НЕ возвращаемся к object-URL, потому что storage отдаёт оригинал
+    // и по render-URL без параметров. Это одна из особенностей Supabase Storage.
+    // Однако проще всего — вернуть URL как есть, но БЕЗ query, что даст оригинал.
+    val queryIndex = url.indexOf('?')
+    return if (queryIndex > 0) url.substring(0, queryIndex) else url
+}
 
 @Composable
 fun DetailScreen(
@@ -74,11 +91,6 @@ fun DetailScreen(
     onBackClick: () -> Unit,
     onEditClick: (String) -> Unit = {},
 ) {
-    val compositionTime = remember { Clock.System.now().toEpochMilliseconds() }
-    LaunchedEffect(Unit) {
-        println("DEBUG DetailScreen: composition+firstFrame ${Clock.System.now().toEpochMilliseconds() - compositionTime} мс, vmHash=${viewModel.hashCode()}")
-    }
-
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     when {
@@ -189,9 +201,10 @@ private fun TopPhotoBlock(
             .fillMaxWidth()
             .height(450.dp),
     ) {
-        if (!recipe.photoUrls.firstOrNull().isNullOrBlank()) {
+        val detailPhoto = detailPhotoUrl(recipe.photoUrls.firstOrNull())
+        if (!detailPhoto.isNullOrBlank()) {
             AsyncImage(
-                model = recipe.photoUrls.firstOrNull(),
+                model = detailPhoto,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -471,8 +484,10 @@ private fun StepsList(recipe: Recipe) {
                                     .height(225.dp)
                                     .clip(RoundedCornerShape(12.dp)),
                             ) {
+                                // Для шагов тоже запрашиваем оригинал,
+                                // потому что шаг — это большое фото на весь экран.
                                 AsyncImage(
-                                    model = step.photoUrl,
+                                    model = detailPhotoUrl(step.photoUrl),
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize(),

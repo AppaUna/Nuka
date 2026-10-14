@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import coil3.ImageLoader
-import coil3.compose.setSingletonImageLoaderFactory
 import com.appa.recipeapp.data.remote.SupabaseAuthApi
 import com.appa.recipeapp.data.remote.SupabaseClient
 import com.appa.recipeapp.data.remote.SupabaseRecipeApi
@@ -65,11 +64,6 @@ private val appModule = module {
 @Composable
 fun App() {
     KoinApplication(application = { modules(appModule) }) {
-        // Подключаем кастомный ImageLoader ко всем AsyncImage
-        setSingletonImageLoaderFactory { context ->
-            createImageLoader()
-        }
-
         AppTheme {
             Box(modifier = Modifier.fillMaxSize()) {
                 Image(

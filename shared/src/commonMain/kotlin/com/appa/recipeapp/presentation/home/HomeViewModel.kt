@@ -32,8 +32,6 @@ class HomeViewModel(
     private var mainFeedJob: Job? = null
 
     init {
-        println("DEBUG HomeViewModel: создан #${hashCode()}")
-
         observeDisplayName()
         loadAllTags()
         observeStaticSections()
@@ -45,9 +43,6 @@ class HomeViewModel(
         }
     }
 
-    /**
-     * Следим за именем в authRepository — если обновилось в профиле, обновляем и на Home.
-     */
     private fun observeDisplayName() {
         authRepository.session
             .onEach { session ->
@@ -91,10 +86,6 @@ class HomeViewModel(
                 _state.value = _state.value.copy(isMainFeedEndReached = endReached)
             }
             .launchIn(viewModelScope)
-
-        // isSectionsLoaded — НЕ подписываемся здесь:
-        // флаг isStaticSectionsLoaded ставится в observeStaticSections() вместе с данными,
-        // чтобы не было гонки (loaded=true, а данные ещё не пришли).
     }
 
     private fun loadAllTags() {
@@ -114,13 +105,12 @@ class HomeViewModel(
             repository.getByTag("ужин"),
             repository.getTopRated(6),
         ) { breakfast, lunch, dinner, top ->
+
             _state.value = _state.value.copy(
                 breakfast = breakfast,
                 lunch = lunch,
                 dinner = dinner,
                 topRated = top,
-                // Флаг ставится ЗДЕСЬ — одновременно с данными.
-                // Это убирает гонку, при которой флаг уже true, а breakfast ещё пуст.
                 isStaticSectionsLoaded = true,
             )
         }.launchIn(viewModelScope)
@@ -197,7 +187,6 @@ class HomeViewModel(
             try {
                 val repo = repository as? SupabaseRecipeRepository
                 repo?.refreshAll()
-                kotlinx.coroutines.delay(300)
             } finally {
                 _isRefreshing.value = false
             }

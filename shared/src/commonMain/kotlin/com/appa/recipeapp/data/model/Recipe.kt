@@ -1,7 +1,9 @@
 package com.appa.recipeapp.data.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class Ingredient(
     val name: String = "",
@@ -9,12 +11,14 @@ data class Ingredient(
     val unit: String = "",
 )
 
+@Immutable
 @Serializable
 data class RecipeStep(
     val text: String = "",
     val photoUrl: String? = null,
 )
 
+@Immutable
 @Serializable
 data class Rating(
     val userId: String = "",
@@ -24,6 +28,7 @@ data class Rating(
     val createdAt: Long = 0L,
 )
 
+@Immutable
 @Serializable
 data class MusicTrack(
     val title: String = "",
@@ -31,6 +36,7 @@ data class MusicTrack(
     val thumbnailUrl: String = "",
 )
 
+@Immutable
 @Serializable
 data class Recipe(
     val id: String = "",
@@ -49,11 +55,8 @@ data class Recipe(
     val musicNote: String = "",
     val musicTracks: List<MusicTrack> = emptyList(),
     val notes: String = "",
-    /** Средний рейтинг из view `recipes_with_authors`. 0.0 если оценок нет. */
     val averageRating: Double = 0.0,
-    /** Количество оценок из view `recipes_with_authors`. 0 если нет. */
     val ratingsCount: Int = 0,
-    /** Оценка популярности из view `recipes_weekly`. 0.0 если нет недельной активности. */
     val popularityScore: Double = 0.0,
 )
 

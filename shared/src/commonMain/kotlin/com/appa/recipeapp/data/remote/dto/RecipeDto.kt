@@ -1,5 +1,6 @@
 package com.appa.recipeapp.data.remote.dto
 
+import androidx.compose.runtime.Immutable
 import com.appa.recipeapp.data.model.Ingredient
 import com.appa.recipeapp.data.model.MusicTrack
 import com.appa.recipeapp.data.model.Recipe
@@ -10,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 
+@Immutable
 @Serializable
 data class RecipeDto(
     val id: String = "",
@@ -41,6 +43,7 @@ data class RecipeDto(
     val popularityScore: Double = 0.0,
 )
 
+@Immutable
 @Serializable
 data class RecipeInsertDto(
     @SerialName("author_id")
@@ -61,6 +64,7 @@ data class RecipeInsertDto(
     val notes: String = "",
 )
 
+@Immutable
 @Serializable
 data class RecipeUpdateDto(
     val title: String,
@@ -79,6 +83,7 @@ data class RecipeUpdateDto(
     val notes: String = "",
 )
 
+@Immutable
 @Serializable
 data class RatingDto(
     val id: String = "",
@@ -96,6 +101,29 @@ data class RatingDto(
 
 private val dtoJson = Json { ignoreUnknownKeys = true }
 
+/** Размер превью для карточек — 512px достаточно на любом экране. */
+private const val PREVIEW_SIZE = 512
+
+/**
+ * Преобразует оригинальный URL фото в URL Supabase Storage Transform.
+ *
+ * Работает только для Supabase Storage public URL. Если URL ведёт на другой
+ * домен или уже является render-URL — возвращается как есть.
+ *
+ * Формат Supabase Storage Transform:
+ *   /storage/v1/object/public/<bucket>/<file>
+ *   → /storage/v1/render/image/public/<bucket>/<file>?width=...&height=...&resize=cover&quality=...
+ *
+ * Под капотом запрос уходит в imgproxy, который уменьшает фото на лету.
+ */
+private fun transformPhotoUrl(originalUrl: String): String {
+    val marker = "/storage/v1/object/public/"
+    if (!originalUrl.contains(marker)) return originalUrl
+
+    val renderUrl = originalUrl.replace(marker, "/storage/v1/render/image/public/")
+    return "$renderUrl?width=$PREVIEW_SIZE&height=$PREVIEW_SIZE&resize=cover&quality=80"
+}
+
 fun RecipeDto.toDomain(favoriteIds: Set<String> = emptySet()): Recipe = Recipe(
     id = id,
     authorId = authorId,
@@ -105,7 +133,9 @@ fun RecipeDto.toDomain(favoriteIds: Set<String> = emptySet()): Recipe = Recipe(
     ingredients = parseIngredients(ingredients),
     steps = parseSteps(steps),
     tags = tags,
-    photoUrls = listOfNotNull(photoUrl?.takeIf { it.isNotBlank() }),
+    photoUrls = listOfNotNull(
+        photoUrl?.takeIf { it.isNotBlank() }?.let(::transformPhotoUrl)
+    ),
     ratings = emptyList(),
     cookingTimeMinutes = cookingTimeMinutes,
     createdAt = 0L,
@@ -139,7 +169,7 @@ fun Recipe.toUpdateDto(): RecipeUpdateDto = RecipeUpdateDto(
     ingredients = ingredients,
     steps = steps,
     tags = tags,
-    photoUrl = photoUrls.firstOrNull() ?: "",   // ← пустая строка, если нет фото
+    photoUrl = photoUrls.firstOrNull() ?: "",
     musicNote = musicNote,
     musicTracks = musicTracks,
     notes = notes,

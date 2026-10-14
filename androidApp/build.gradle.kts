@@ -27,6 +27,10 @@ dependencies {
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.activity.compose)
 
+    // ─── Coil: нужен в androidApp, потому что MainActivity использует SingletonImageLoader ───
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.ktor3)
+
     implementation(libs.filekit.dialogs)
 
     implementation(libs.compose.uiToolingPreview)
@@ -65,13 +69,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // ─── Подпись через keystore ───
             if (keystorePropsFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }

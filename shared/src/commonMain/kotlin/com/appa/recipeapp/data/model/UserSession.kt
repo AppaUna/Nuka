@@ -1,11 +1,13 @@
 package com.appa.recipeapp.data.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 /**
  * Текущая сессия пользователя.
  * Хранится локально в multiplatform-settings.
  */
+@Immutable
 @Serializable
 data class UserSession(
     val accessToken: String,

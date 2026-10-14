@@ -67,7 +67,6 @@ import com.appa.recipeapp.ui.theme.Surface
 import com.appa.recipeapp.ui.theme.SurfaceVariant
 import com.appa.recipeapp.ui.theme.TextPrimary
 import com.appa.recipeapp.ui.theme.TextSecondary
-import kotlinx.datetime.Clock
 import org.jetbrains.compose.resources.painterResource
 
 private val DEFAULT_TAGS = listOf(
@@ -75,17 +74,14 @@ private val DEFAULT_TAGS = listOf(
     "десерт", "выпечка", "напитки", "закуска",
 )
 
+/** Высота большой карточки рецепта — используется для фиксации высоты LazyRow. */
+private val LARGE_CARD_HEIGHT = 275.dp
+
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
     onRecipeClick: (String) -> Unit,
 ) {
-    // ─── ДИАГНОСТИКА ───
-    val compositionTime = remember { Clock.System.now().toEpochMilliseconds() }
-    LaunchedEffect(Unit) {
-        println("DEBUG HomeScreen: composition+firstFrame ${Clock.System.now().toEpochMilliseconds() - compositionTime} мс, vmHash=${viewModel.hashCode()}")
-    }
-
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     var showWadsworth by remember { mutableStateOf(false) }
@@ -101,7 +97,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
-            item {
+            item(contentType = "header") {
                 ScreenHeader(
                     title = "${greetingForNow()}, ${state.greetingName}",
                     subtitle = "Что приготовим сегодня?",
@@ -109,14 +105,14 @@ fun HomeScreen(
                 )
             }
 
-            item {
+            item(contentType = "search") {
                 SearchBar(
                     query = state.query,
                     onQueryChange = viewModel::onSearchChange,
                 )
             }
 
-            item {
+            item(contentType = "tag_filters") {
                 TagFiltersRow(
                     allTags = mergedTags(state.allTags),
                     selectedTags = state.selectedTags,
@@ -125,27 +121,31 @@ fun HomeScreen(
                 )
             }
 
-            // ─── Блок "Рецепты" (mainFeed) с пагинацией ───
-            item { SectionDivider() }
-            item { SectionHeader(title = "Рецепты") }
-            item {
+            // ─── Рецепты ───
+            item(contentType = "divider") { SectionDivider() }
+            item(contentType = "section_header") { SectionHeader(title = "Рецепты") }
+            item(contentType = "main_feed") {
                 when {
                     state.mainFeed.isNotEmpty() -> {
-                        MainFeedRow(
-                            mainFeed = state.mainFeed,
-                            isLoadingMore = state.isMainFeedLoadingMore,
-                            isEndReached = state.isMainFeedEndReached,
-                            isFiltering = isFiltering,
-                            onRecipeClick = onRecipeClick,
-                            onLoadMore = { viewModel.loadMoreMainFeed() },
-                        )
+                        Box(modifier = Modifier.height(LARGE_CARD_HEIGHT)) {
+                            MainFeedRow(
+                                mainFeed = state.mainFeed,
+                                isLoadingMore = state.isMainFeedLoadingMore,
+                                isEndReached = state.isMainFeedEndReached,
+                                isFiltering = isFiltering,
+                                onRecipeClick = onRecipeClick,
+                                onLoadMore = { viewModel.loadMoreMainFeed() },
+                            )
+                        }
                     }
                     !state.isRecipesLoaded -> {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(count = 3) { SkeletonRecipeCardLarge() }
+                        Box(modifier = Modifier.height(LARGE_CARD_HEIGHT)) {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                items(count = 3) { SkeletonRecipeCardLarge() }
+                            }
                         }
                     }
                     state.hasNetworkError -> {
@@ -168,23 +168,23 @@ fun HomeScreen(
                 }
             }
 
-            item {
+            item(contentType = "quote") {
                 QuoteCard(
                     quote = QuoteRepository.getToday(),
                     gusteauImage = Res.drawable.gusteau,
                 )
             }
 
-            // ─── Секции Завтрак / Обед / Ужин ───
-            item { SectionDivider() }
-            item {
+            // ─── Завтрак ───
+            item(contentType = "divider") { SectionDivider() }
+            item(contentType = "section_header") {
                 SectionHeader(
                     title = "Завтрак",
                     onSeeAllClick = { viewModel.toggleBreakfastExpanded() },
                     isExpanded = state.isBreakfastExpanded,
                 )
             }
-            item {
+            item(contentType = "section_strip") {
                 when {
                     state.breakfast.isNotEmpty() -> {
                         val recipes = if (state.isBreakfastExpanded) {
@@ -203,15 +203,16 @@ fun HomeScreen(
                 }
             }
 
-            item { SectionDivider() }
-            item {
+            // ─── Обед ───
+            item(contentType = "divider") { SectionDivider() }
+            item(contentType = "section_header") {
                 SectionHeader(
                     title = "Обед",
                     onSeeAllClick = { viewModel.toggleLunchExpanded() },
                     isExpanded = state.isLunchExpanded,
                 )
             }
-            item {
+            item(contentType = "section_strip") {
                 when {
                     state.lunch.isNotEmpty() -> {
                         val recipes = if (state.isLunchExpanded) {
@@ -230,15 +231,16 @@ fun HomeScreen(
                 }
             }
 
-            item { SectionDivider() }
-            item {
+            // ─── Ужин ───
+            item(contentType = "divider") { SectionDivider() }
+            item(contentType = "section_header") {
                 SectionHeader(
                     title = "Ужин",
                     onSeeAllClick = { viewModel.toggleDinnerExpanded() },
                     isExpanded = state.isDinnerExpanded,
                 )
             }
-            item {
+            item(contentType = "section_strip") {
                 when {
                     state.dinner.isNotEmpty() -> {
                         val recipes = if (state.isDinnerExpanded) {
@@ -258,9 +260,9 @@ fun HomeScreen(
             }
 
             // ─── Популярное ───
-            item { SectionDivider() }
-            item { SectionHeader(title = "Популярное на этой неделе") }
-            item {
+            item(contentType = "divider") { SectionDivider() }
+            item(contentType = "section_header") { SectionHeader(title = "Популярное на этой неделе") }
+            item(contentType = "popular") {
                 when {
                     state.topRated.isNotEmpty() -> {
                         Box(
@@ -282,6 +284,10 @@ fun HomeScreen(
                                     .offset(x = 60.dp, y = 60.dp),
                             )
 
+                            // ─── Column вместо LazyColumn ───
+                            // Вложенный LazyColumn перехватывал fling у родительского
+                            // LazyColumn. Для 6 элементов LazyColumn не нужен — Column
+                            // проще и не конфликтует с родительским скроллом.
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -322,7 +328,7 @@ fun HomeScreen(
 }
 
 // ═══════════════════════════════════════════
-// MAIN FEED с пагинацией
+// MAIN FEED
 // ═══════════════════════════════════════════
 
 @Composable
@@ -341,9 +347,12 @@ private fun MainFeedRow(
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
             val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible to totalItems
-        }.collect { (lastVisible, totalItems) ->
-            if (!isEndReached && !isLoadingMore && !isFiltering && totalItems > 0) {
+            val isScrolling = listState.isScrollInProgress
+            Triple(lastVisible, totalItems, isScrolling)
+        }.collect { (lastVisible, totalItems, isScrolling) ->
+            // Загружаем только когда скролл ПОЛНОСТЬЮ остановился.
+            // Иначе onLoadMore добавляет элементы во время fling → fling сбрасывается.
+            if (!isScrolling && !isEndReached && !isLoadingMore && !isFiltering && totalItems > 0) {
                 if (lastVisible >= totalItems - 3) {
                     onLoadMore()
                 }
@@ -388,7 +397,7 @@ private fun MainFeedRow(
     }
 }
 
-// ─── Вспомогательные компоненты ───
+// ─── Вспомогательные ───
 
 @Composable
 private fun TextPlaceholder(

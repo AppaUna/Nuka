@@ -32,17 +32,34 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: #FF9800;
-            font-family: sans-serif;
-            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .loading-logo {
+            width: 140px;
+            height: 140px;
+            object-fit: contain;
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
         }
     </style>
 </head>
 <body>
 <div id="compose-root">
-    <div class="loading">Загрузка Nuka...</div>
+    <div class="loading">
+        <img src="logo.webp" alt="Nuka" class="loading-logo">
+    </div>
 </div>
 
+<script>
+    window.skikoProperties = {
+      'skiko.gpu.resourceCacheLimit': '1G'
+    };
+</script>
 <!-- JS-помощники для передачи данных Kotlin ↔ JS -->
 <script>
     // Для audio (Blob URL)
@@ -77,8 +94,6 @@
 
     // Для canvas-энкода (ImageBitmap → JPEG)
     window.nukaCanvas = {
-        // Принимает RGBA как Uint8Array (или Uint8ClampedArray), width, height, quality
-        // Возвращает data URL (base64 JPEG). Синхронно.
         encodeJpegSync: function(rgbaBytes, width, height, quality) {
             try {
                 const canvas = document.createElement('canvas');
@@ -86,7 +101,6 @@
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
 
-                // Преобразуем в Uint8ClampedArray
                 const clamped = new Uint8ClampedArray(rgbaBytes.buffer, rgbaBytes.byteOffset, rgbaBytes.byteLength);
 
                 const imageData = new ImageData(clamped, width, height);
@@ -143,5 +157,6 @@
         });
     }
 </script>
+
 </body>
 </html>

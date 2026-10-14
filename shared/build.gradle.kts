@@ -24,6 +24,9 @@ kotlin {
         browser {
             commonWebpackConfig {
                 outputFileName = "nuka.js"
+                // Отключаем sourcemap в production-сборке
+                // В dev-режиме sourcemap остаётся — для отладки через DevTools
+                devtool = null
             }
         }
         binaries.executable()

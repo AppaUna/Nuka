@@ -31,3 +31,5 @@ kotlin-js-store/
 *.dex
 *.wasm
 nuka.js*
+
+backup/
