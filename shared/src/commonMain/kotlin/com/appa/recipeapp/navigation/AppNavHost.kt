@@ -2,6 +2,7 @@
 
 package com.appa.recipeapp.navigation
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.savedstate.read
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -34,6 +35,9 @@ import com.appa.recipeapp.presentation.profile.ProfileScreen
 import com.appa.recipeapp.presentation.profile.ProfileViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 
 @Composable
 fun AppNavHost() {
@@ -75,7 +79,22 @@ fun AppNavHost() {
         NavHost(
             navController = navController,
             startDestination = if (isLoggedIn) Routes.Home.route else Routes.Auth.route,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = padding.calculateTopPadding()),
+            // ─── Анимации ───
+                enterTransition = {
+                    fadeIn(animationSpec = tween(150))
+                },
+                exitTransition = {
+                    fadeOut(animationSpec = tween(150))
+                },
+                popEnterTransition = {
+                    fadeIn(animationSpec = tween(150))
+                },
+                popExitTransition = {
+                    fadeOut(animationSpec = tween(150))
+                },
         ) {
             composable(Routes.Auth.route) {
                 val viewModel = remember {

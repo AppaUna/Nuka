@@ -83,13 +83,13 @@ fun FavoritesScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .size(280.dp)
-                    .offset(x = 60.dp, y = 60.dp),
+                    .offset(x = 60.dp, y = (15).dp),
             )
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = 120.dp),
         ) {
             item {
                 ScreenHeader(

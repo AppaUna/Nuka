@@ -18,6 +18,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import com.appa.recipeapp.data.remote.dto.ProfileDto
 
 sealed class ApiResult<out T> {
     data class Success<T>(val data: T) : ApiResult<T>()
@@ -407,6 +408,50 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
         } catch (e: Throwable) {
             println("DEBUG fetchSpotifyThumbnail EXCEPTION: ${e::class.simpleName} — ${e.message}")
             null
+        }
+    }
+
+    // ─── Profiles / Avatars ───
+
+    suspend fun getProfiles(): List<ProfileDto> {
+        return try {
+            val response: HttpResponse = client.http.get(
+                "${SupabaseConfig.BASE_URL}${SupabaseConfig.REST_PATH}/profiles",
+            ) {
+                parameter("select", "id,avatar_url,display_name,name_color")
+                headers {
+                    client.anonHeaders().forEach { (key, value) -> header(key, value) }
+                }
+            }
+            if (response.status.value in 200..299) response.body() else emptyList()
+        } catch (e: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun updateProfileAvatar(accessToken: String, userId: String, avatarUrl: String): Boolean {
+        return try {
+            val body = mapOf("avatar_url" to avatarUrl)
+            val response: HttpResponse = client.http.patch(
+                "${SupabaseConfig.BASE_URL}${SupabaseConfig.REST_PATH}/profiles",
+            ) {
+                parameter("id", "eq.$userId")
+                headers {
+                    client.authHeaders(accessToken).forEach { (key, value) ->
+                        println("DEBUG PATCH header: $key = ${value.take(20)}...")
+                        header(key, value)
+                    }
+                    header("Prefer", "return=representation")
+                }
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            val bodyText = try { response.body<String>() } catch (e: Throwable) { "<empty>" }
+            println("DEBUG updateProfileAvatar: status=${response.status}, body=$bodyText")
+            response.status.value in 200..299
+        } catch (e: Throwable) {
+            println("DEBUG updateProfileAvatar EXCEPTION: ${e::class.simpleName} — ${e.message}")
+            false
         }
     }
 }

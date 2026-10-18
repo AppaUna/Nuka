@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,10 +30,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,20 +53,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.appa.recipeapp.data.model.Recipe
+import com.appa.recipeapp.data.repository.ThemeRepository
+import com.appa.recipeapp.platform.rememberPhotoPicker
+import com.appa.recipeapp.presentation.editor.CropScreen
 import com.appa.recipeapp.ui.components.RecipeImage
-import com.appa.recipeapp.ui.theme.Accent
-import com.appa.recipeapp.ui.theme.Background
-import com.appa.recipeapp.ui.theme.DividerColor
-import com.appa.recipeapp.ui.theme.Surface
-import com.appa.recipeapp.ui.theme.TextPrimary
-import com.appa.recipeapp.ui.theme.TextSecondary
+import com.appa.recipeapp.ui.theme.AllThemes
+import io.github.vinceglb.filekit.PlatformFile
 import org.jetbrains.compose.resources.painterResource
+import org.koin.compose.koinInject
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.profile_decor
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import kotlinx.datetime.Clock
 
 @Composable
 fun ProfileScreen(
@@ -69,13 +72,18 @@ fun ProfileScreen(
     onEditRecipe: (String) -> Unit = {},
     onRecipeClick: (String) -> Unit = {},
 ) {
-    // ─── ДИАГНОСТИКА ───
-    val compositionTime = remember { Clock.System.now().toEpochMilliseconds() }
-    LaunchedEffect(Unit) {
-        println("DEBUG ProfileScreen: composition+firstFrame ${Clock.System.now().toEpochMilliseconds() - compositionTime} мс, vmHash=${viewModel.hashCode()}")
-    }
-
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    val themeRepository: ThemeRepository = koinInject()
+    val currentTheme by themeRepository.currentTheme.collectAsStateWithLifecycle()
+
+    var cropFile by remember { mutableStateOf<PlatformFile?>(null) }
+
+    val photoPicker = rememberPhotoPicker { file ->
+        if (file != null) {
+            cropFile = file
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.refreshIfStale()
@@ -83,9 +91,26 @@ fun ProfileScreen(
 
     if (state.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Accent)
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
+    }
+
+    // Кроп-диалог для аватарки (1:1)
+    cropFile?.let { file ->
+        CropScreen(
+            photoFile = file,
+            aspectRatio = 1 to 1,
+            onConfirm = { bytes ->
+                println("DEBUG ProfileScreen: onConfirm, ${bytes.size} байт")
+                viewModel.uploadAvatar(bytes, "jpg")
+                cropFile = null
+            },
+            onCancel = {
+                println("DEBUG ProfileScreen: onCancel")
+                cropFile = null
+            },
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -100,130 +125,138 @@ fun ProfileScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .size(280.dp)
-                .offset(x = 60.dp, y = 60.dp),
+                .offset(x = 60.dp, y = (-10).dp),
         )
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 8.dp),
-            ) {
-                item {
-                    ScreenHeader(title = "Профиль")
-                }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 120.dp),
+        ) {
+            item {
+                ScreenHeader(title = "Профиль")
+            }
 
+            item {
+                UserBlock(
+                    login = state.login,
+                    displayName = state.displayName,
+                    avatarUrl = state.avatarUrl,
+                    nameColor = parseHexColor(state.selectedNameColor),
+                    onAvatarClick = { photoPicker.launch() },
+                )
+            }
+
+            item {
+                StatsRow(
+                    recipes = state.recipesCount,
+                    ratings = state.ratingsCount,
+                    favorites = state.favoritesCount,
+                )
+            }
+            item { Spacer(Modifier.height(8.dp)) }
+
+            item {
+                ExpandableHeader(
+                    title = "Мои рецепты",
+                    isExpanded = state.isMyRecipesExpanded,
+                    onClick = viewModel::toggleMyRecipes,
+                )
+            }
+            if (state.isMyRecipesExpanded) {
+                if (state.myRecipes.isEmpty()) {
+                    item {
+                        Text(
+                            text = "Нет рецептов",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        )
+                    }
+                } else {
+                    items(state.myRecipes, key = { it.id }) { recipe ->
+                        MyRecipeRow(
+                            recipe = recipe,
+                            onClick = { onRecipeClick(recipe.id) },
+                            onEdit = { onEditRecipe(recipe.id) },
+                            onDelete = { viewModel.onDeleteRecipe(recipe.id) },
+                        )
+                    }
+                }
+            }
+            item { ThinDivider() }
+
+            item {
+                ExpandableHeader(
+                    title = "Персонализация",
+                    isExpanded = state.isPersonalizationExpanded,
+                    onClick = viewModel::togglePersonalization,
+                )
+            }
+            if (state.isPersonalizationExpanded) {
                 item {
-                    UserBlock(
-                        login = state.login,
-                        displayName = state.displayName,
-                        nameColor = parseHexColor(state.selectedNameColor),
+                    EditableNameRow(
+                        currentName = state.displayName,
+                        isEditing = state.isEditingName,
+                        draft = state.nameDraft,
+                        onStartEdit = viewModel::startEditingName,
+                        onDraftChange = viewModel::onNameDraftChange,
+                        onSave = viewModel::saveName,
+                        onCancel = viewModel::cancelEditingName,
                     )
                 }
-
                 item {
-                    StatsRow(
-                        recipes = state.recipesCount,
-                        ratings = state.ratingsCount,
-                        favorites = state.favoritesCount,
+                    ColorPickerRow(
+                        selectedColor = state.selectedNameColor,
+                        onColorSelected = viewModel::selectNameColor,
                     )
                 }
                 item { Spacer(Modifier.height(8.dp)) }
-
                 item {
-                    ExpandableHeader(
-                        title = "Мои рецепты",
-                        isExpanded = state.isMyRecipesExpanded,
-                        onClick = viewModel::toggleMyRecipes,
-                    )
-                }
-                if (state.isMyRecipesExpanded) {
-                    if (state.myRecipes.isEmpty()) {
-                        item {
-                            Text(
-                                text = "Нет рецептов",
-                                color = TextSecondary,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            )
-                        }
-                    } else {
-                        items(state.myRecipes, key = { it.id }) { recipe ->
-                            MyRecipeRow(
-                                recipe = recipe,
-                                onClick = { onRecipeClick(recipe.id) },
-                                onEdit = { onEditRecipe(recipe.id) },
-                                onDelete = { viewModel.onDeleteRecipe(recipe.id) },
-                            )
-                        }
-                    }
-                }
-                item { ThinDivider() }
-
-                item {
-                    ExpandableHeader(
-                        title = "Персонализация",
-                        isExpanded = state.isPersonalizationExpanded,
-                        onClick = viewModel::togglePersonalization,
-                    )
-                }
-                if (state.isPersonalizationExpanded) {
-                    item {
-                        EditableNameRow(
-                            currentName = state.displayName,
-                            isEditing = state.isEditingName,
-                            draft = state.nameDraft,
-                            onStartEdit = viewModel::startEditingName,
-                            onDraftChange = viewModel::onNameDraftChange,
-                            onSave = viewModel::saveName,
-                            onCancel = viewModel::cancelEditingName,
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { viewModel.applyPersonalization() }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Применить",
+                            color = MaterialTheme.colorScheme.background,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
-                    item {
-                        ColorPickerRow(
-                            selectedColor = state.selectedNameColor,
-                            onColorSelected = viewModel::selectNameColor,
-                        )
-                    }
-                    item {
-                        PersonalizationRow(label = "Тема", value = "Тёмная")
-                    }
-                    item { Spacer(Modifier.height(12.dp)) }
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Accent)
-                                .clickable { viewModel.applyPersonalization() }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Применить",
-                                color = Background,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
                 }
-                item { ThinDivider() }
+                item { Spacer(Modifier.height(16.dp)) }
+                item {
+                    InlineThemeSelector(
+                        currentThemeId = currentTheme.id,
+                        onSelect = { themeId -> themeRepository.setTheme(themeId) },
+                    )
+                }
             }
+            item { ThinDivider() }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-            ) {
-                Text(
-                    text = "Выйти из аккаунта",
-                    color = Accent,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+            item {
+                Row(
                     modifier = Modifier
-                        .clickable { viewModel.logout() }
+                        .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 16.dp),
-                )
+                    horizontalArrangement = Arrangement.Start,
+                ) {
+                    Text(
+                        text = "Выйти из аккаунта",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clickable { viewModel.logout() }
+                            .padding(vertical = 8.dp),
+                    )
+                }
             }
         }
     }
@@ -237,32 +270,42 @@ fun ProfileScreen(
 private fun UserBlock(
     login: String,
     displayName: String,
+    avatarUrl: String?,
     nameColor: Color,
+    onAvatarClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
                 .size(96.dp)
                 .clip(CircleShape)
-                .background(Accent),
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable(onClick = onAvatarClick),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = displayName.take(1).uppercase(),
-                color = Background,
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            if (avatarUrl != null) {
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = displayName.take(1).uppercase(),
+                    color = MaterialTheme.colorScheme.background,
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Spacer(Modifier.height(14.dp))
         Text(
-            text = login,   // ← БЕЗ @
-            color = TextPrimary,
+            text = login,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
         )
@@ -296,14 +339,14 @@ private fun StatItem(label: String, value: Int) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value.toString(),
-            color = TextPrimary,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(2.dp))
         Text(
             text = label,
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
         )
     }
@@ -314,7 +357,7 @@ private fun StatDivider() {
     Box(
         modifier = Modifier
             .size(width = 1.dp, height = 22.dp)
-            .background(DividerColor),
+            .background(MaterialTheme.colorScheme.outline),
     )
 }
 
@@ -325,7 +368,7 @@ private fun ThinDivider() {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .height(1.dp)
-            .background(DividerColor.copy(alpha = 0.5f)),
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
     )
 }
 
@@ -350,14 +393,14 @@ private fun ExpandableHeader(
     ) {
         Text(
             text = title,
-            color = TextPrimary,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
         )
         Icon(
             imageVector = Icons.Default.KeyboardArrowDown,
             contentDescription = null,
-            tint = TextSecondary,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .size(24.dp)
                 .rotate(rotation),
@@ -390,7 +433,7 @@ private fun MyRecipeRow(
         Spacer(Modifier.width(12.dp))
         Text(
             text = recipe.title,
-            color = TextPrimary,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -403,7 +446,7 @@ private fun MyRecipeRow(
                 .clickable(onClick = onEdit),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "✎", color = Accent, fontSize = 16.sp)
+            Text(text = "✎", color = MaterialTheme.colorScheme.primary, fontSize = 16.sp)
         }
         Box(
             modifier = Modifier
@@ -412,7 +455,7 @@ private fun MyRecipeRow(
                 .clickable(onClick = onDelete),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "✕", color = TextSecondary, fontSize = 16.sp)
+            Text(text = "✕", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
         }
     }
 }
@@ -436,7 +479,7 @@ private fun EditableNameRow(
     ) {
         Text(
             text = "Отображаемое имя",
-            color = TextPrimary,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
         )
         if (isEditing) {
@@ -445,29 +488,32 @@ private fun EditableNameRow(
                     modifier = Modifier
                         .width(140.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Surface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
                     BasicTextField(
                         value = draft,
                         onValueChange = onDraftChange,
                         singleLine = true,
-                        textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
-                        cursorBrush = SolidColor(Accent),
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 14.sp,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = "✓",
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 16.sp,
                     modifier = Modifier.clickable(onClick = onSave),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = "✕",
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 16.sp,
                     modifier = Modifier.clickable(onClick = onCancel),
                 )
@@ -476,14 +522,14 @@ private fun EditableNameRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = currentName,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = "✎",
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 14.sp,
                     modifier = Modifier.clickable(onClick = onStartEdit),
                 )
@@ -492,22 +538,53 @@ private fun EditableNameRow(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun PersonalizationRow(label: String, value: String) {
-    Row(
+private fun InlineThemeSelector(
+    currentThemeId: String,
+    onSelect: (String) -> Unit,
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = label, color = TextPrimary, fontSize = 14.sp)
         Text(
-            text = value,
-            color = TextSecondary,
+            text = "Тема",
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
         )
+        Spacer(Modifier.height(10.dp))
+
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AllThemes.forEach { theme ->
+                val isPlaceholder = theme.id == "halloween"
+                val isSelected = theme.id == currentThemeId
+
+                Text(
+                    text = theme.displayName,
+                    color = when {
+                        isPlaceholder -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onBackground
+                    },
+                    fontSize = 14.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier
+                        .clickable(enabled = !isPlaceholder,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            if (!isPlaceholder) onSelect(theme.id)
+                        }
+                        .padding(vertical = 4.dp)
+                )
+            }
+        }
     }
 }
 
@@ -533,7 +610,7 @@ private fun ColorPickerRow(
     ) {
         Text(
             text = "Цвет имени",
-            color = TextPrimary,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(10.dp))
@@ -553,7 +630,7 @@ private fun ColorPickerRow(
                             if (isSelected) {
                                 Modifier.border(
                                     width = 2.dp,
-                                    color = TextPrimary,
+                                    color = MaterialTheme.colorScheme.onBackground,
                                     shape = CircleShape,
                                 )
                             } else Modifier
@@ -565,7 +642,7 @@ private fun ColorPickerRow(
         Spacer(Modifier.height(6.dp))
         Text(
             text = "(несомненно самая важная функция приложения)",
-            color = TextSecondary.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             fontSize = 11.sp,
             fontStyle = FontStyle.Italic,
         )

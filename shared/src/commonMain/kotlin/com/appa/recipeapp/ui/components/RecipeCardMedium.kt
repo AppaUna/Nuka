@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -75,11 +73,9 @@ fun RecipeCardMedium(
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = Accent,
-                modifier = Modifier.size(14.dp),
+            AuthorAvatar(
+                avatarUrl = recipe.authorAvatarUrl,
+                size = 14.dp,
             )
             Spacer(Modifier.width(3.dp))
             Text(
@@ -96,7 +92,6 @@ fun RecipeCardMedium(
                 .align(Alignment.BottomStart)
                 .padding(10.dp),
         ) {
-            // ⏱ Время с иконкой таймера
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_timer),

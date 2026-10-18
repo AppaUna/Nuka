@@ -42,6 +42,7 @@ data class Recipe(
     val id: String = "",
     val authorId: String = "",
     val authorName: String = "",
+    val authorAvatarUrl: String? = null,
     val title: String = "",
     val description: String = "",
     val ingredients: List<Ingredient> = emptyList(),

@@ -27,17 +27,13 @@ class ProfileViewModel(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
-    private val myRatingsCountFlow = MutableStateFlow(0)
-
     init {
-        println("DEBUG ProfileViewModel: создан #${hashCode()}")
         _state.value = _state.value.copy(
             login = authRepository.getLogin(),
             displayName = authRepository.getDisplayName(),
             selectedNameColor = userPreferences.getNameColor(),
         )
 
-        loadMyRatingsCount()
         observeData()
 
         userPreferences.nameColor
@@ -46,7 +42,6 @@ class ProfileViewModel(
             }
             .launchIn(viewModelScope)
 
-        // Следим за обновлением сессии (например, когда изменили display_name)
         authRepository.session
             .onEach { session ->
                 if (session != null) {
@@ -56,30 +51,27 @@ class ProfileViewModel(
             .launchIn(viewModelScope)
     }
 
-    private fun loadMyRatingsCount() {
-        viewModelScope.launch {
-            val repo = repository as? SupabaseRecipeRepository
-            if (repo != null) {
-                myRatingsCountFlow.value = repo.getMyRatingsCount()
-            }
-        }
-    }
-
     private fun observeData() {
         val userId = authRepository.getUserId()
+        val repo = repository as? SupabaseRecipeRepository
+
+        val ratingsFlow = repo?.myRatingsCountState ?: MutableStateFlow(null)
+        val avatarFlow = repo?.myAvatarState ?: MutableStateFlow<String?>(null)
 
         combine(
             repository.getUserRecipes(userId),
             repository.getFavorites(),
             repository.getMainFeed(),
-            myRatingsCountFlow,
-        ) { myRecipes, favorites, allRecipes, myRatingsCount ->
+            ratingsFlow,
+            avatarFlow,
+        ) { myRecipes, favorites, allRecipes, myRatingsCount, myAvatarUrl ->
             _state.value.copy(
                 myRecipes = myRecipes,
                 recipesCount = myRecipes.size,
-                ratingsCount = myRatingsCount,
+                ratingsCount = myRatingsCount ?: 0,
                 favoritesCount = favorites.size,
                 isLoading = false,
+                avatarUrl = myAvatarUrl, // <-- Теперь аватарка всегда берется из кэша репозитория
             )
         }.onEach { newState ->
             _state.value = newState
@@ -120,19 +112,13 @@ class ProfileViewModel(
             return
         }
 
-        // Оптимистично обновляем UI
         _state.value = _state.value.copy(
             displayName = trimmed,
             isEditingName = false,
         )
 
-        // Отправляем на сервер
         viewModelScope.launch {
-            val success = authRepository.updateDisplayName(trimmed)
-            if (!success) {
-                println("DEBUG ProfileViewModel: не удалось обновить display_name на сервере")
-                // Можно откатить, но пока оставим — при след. загрузке придёт старое
-            }
+            authRepository.updateDisplayName(trimmed)
         }
     }
 
@@ -151,14 +137,10 @@ class ProfileViewModel(
         }
     }
 
-    /**
-     * Автообновление при заходе на экран (не чаще раза в 30 сек).
-     */
     fun refreshIfStale() {
         viewModelScope.launch {
             val repo = repository as? SupabaseRecipeRepository
             repo?.refreshIfStale()
-            loadMyRatingsCount()
         }
     }
 
@@ -168,18 +150,31 @@ class ProfileViewModel(
             try {
                 val repo = repository as? SupabaseRecipeRepository
                 repo?.refreshAll()
-                loadMyRatingsCount()
-                kotlinx.coroutines.delay(500)
             } finally {
                 _isRefreshing.value = false
             }
         }
-
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        println("DEBUG ProfileViewModel: очищен #${hashCode()}")
+    fun uploadAvatar(bytes: ByteArray, ext: String = "jpg") {
+        println("DEBUG ProfileViewModel: uploadAvatar, ${bytes.size} байт")
+        viewModelScope.launch {
+            val repo = repository as? SupabaseRecipeRepository ?: run {
+                println("DEBUG ProfileViewModel: repo is not SupabaseRecipeRepository")
+                return@launch
+            }
+            val newUrl = repo.uploadAvatar(bytes, ext)
+            println("DEBUG ProfileViewModel: uploadAvatar result = $newUrl")
+            // _state.value = _state.value.copy(avatarUrl = newUrl) больше не нужно
+            // combine сам подхватит новый URL из avatarFlow
+        }
+    }
+
+    fun uploadAvatar(localUri: String) {
+        viewModelScope.launch {
+            val repo = repository as? SupabaseRecipeRepository ?: return@launch
+            repo.uploadAvatar(localUri)
+        }
     }
 
     fun logout() {

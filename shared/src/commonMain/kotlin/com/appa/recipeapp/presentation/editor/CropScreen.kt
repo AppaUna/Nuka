@@ -32,6 +32,7 @@ fun CropScreen(
     photoFile: PlatformFile,
     onConfirm: (ByteArray) -> Unit,
     onCancel: () -> Unit,
+    aspectRatio: Pair<Int, Int> = 4 to 5,
 ) {
     val imageCropper = rememberImageCropper()
     var sourceBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -104,7 +105,7 @@ fun CropScreen(
         ImageCropperDialog(
             state = cropState,
             style = cropperStyle(
-                aspects = listOf(AspectRatio(4, 5)),
+                aspects = listOf(AspectRatio(aspectRatio.first, aspectRatio.second)),
             )
         )
     }

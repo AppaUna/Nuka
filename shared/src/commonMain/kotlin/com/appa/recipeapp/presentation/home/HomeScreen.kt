@@ -95,7 +95,7 @@ fun HomeScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = 120.dp),
         ) {
             item(contentType = "header") {
                 ScreenHeader(
@@ -281,7 +281,7 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
                                     .size(280.dp)
-                                    .offset(x = 60.dp, y = 60.dp),
+                                    .offset(x = 60.dp, y = (90).dp),
                             )
 
                             // ─── Column вместо LazyColumn ───

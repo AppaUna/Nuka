@@ -38,7 +38,18 @@ class SupabaseRecipeRepository(
     private val weeklyRecipesCache = MutableStateFlow<List<Recipe>>(emptyList())
     private val favoriteIdsCache = MutableStateFlow<Set<String>>(emptySet())
 
-    // ─── Флаги состояния mainFeed (пагинация) ───
+    // Общий кэш всех аватарок по authorId
+    private val avatarCache = MutableStateFlow<Map<String, String?>>(emptyMap())
+
+    // Публичный стейт для текущего пользователя (чтобы ProfileViewModel мог подписаться)
+    private val _myAvatarState = MutableStateFlow<String?>(null)
+    val myAvatarState: StateFlow<String?> = _myAvatarState.asStateFlow()
+
+    // ─── Кэш для количества оценок ───
+    private val ratingsCountCache = MutableStateFlow<Int?>(null)
+    val myRatingsCountState: StateFlow<Int?> = ratingsCountCache.asStateFlow()
+
+    // ─── Флаги состояния mainFeed ───
     private var mainFeedOffset = 0
     private var isEndReached = false
     private var isLoadingMore = false
@@ -82,11 +93,11 @@ class SupabaseRecipeRepository(
             authRepository.session.collect { session ->
                 if (isFirstEmission) {
                     isFirstEmission = false
-                    // Первая загрузка. Ставим lastRefreshTimeMs сразу,
-                    // чтобы refreshIfStale из ViewModel не запускал дубль.
                     lastRefreshTimeMs = currentTimeMillis()
                     if (session != null) {
                         refreshFavoritesSuspend()
+                        refreshRatingsCountSuspend()
+                        refreshProfilesSuspend()
                     }
                     refreshMainFeedSuspend(reset = true)
                     refreshWeeklySuspend()
@@ -94,16 +105,59 @@ class SupabaseRecipeRepository(
                 } else {
                     if (session != null) {
                         refreshFavoritesSuspend()
+                        refreshRatingsCountSuspend()
+                        refreshProfilesSuspend()
                     } else {
                         clearAllFavoriteFlags()
+                        ratingsCountCache.value = null
+                        avatarCache.value = emptyMap()
+                        _myAvatarState.value = null
                     }
                 }
             }
         }
+
+        // Подписываемся на изменения avatarCache, чтобы обновлять аватарку текущего юзера
+        scope.launch {
+            avatarCache.collect { map ->
+                val userId = authRepository.getUserId()
+                _myAvatarState.value = map[userId]
+            }
+        }
     }
 
+    private suspend fun refreshRatingsCountSuspend() {
+        val session = authRepository.ensureValidSession() ?: return
+        try {
+            val count = api.getMyRatingsCount(session.accessToken, session.userId)
+            ratingsCountCache.value = count
+        } catch (e: Throwable) {}
+    }
+
+    private suspend fun refreshProfilesSuspend() {
+        try {
+            val profiles = api.getProfiles()
+            println("DEBUG refreshProfiles: получил ${profiles.size} профилей")
+            val newMap = profiles.associate { it.id to it.avatarUrl }
+            println("DEBUG refreshProfiles: map = $newMap")
+            if (newMap == avatarCache.value) return
+            avatarCache.value = newMap
+            recipesCache.value = recipesCache.value.reapplyAvatars(newMap)
+            // ...
+        } catch (e: Throwable) {
+            println("DEBUG refreshProfiles EXCEPTION: ${e::class.simpleName} — ${e.message}")
+        }
+    }
+
+    private fun List<Recipe>.reapplyAvatars(map: Map<String, String?>): List<Recipe> =
+        map { r ->
+            val avatar = map[r.authorId]
+            if (r.authorAvatarUrl == avatar) r else r.copy(authorAvatarUrl = avatar)
+        }
+
     private fun mapDto(dto: com.appa.recipeapp.data.remote.dto.RecipeDto): Recipe {
-        return dto.toDomain(favoriteIdsCache.value)
+        val avatar = avatarCache.value[dto.authorId]
+        return dto.toDomain(favoriteIdsCache.value, avatarOverride = avatar)
     }
 
     private fun mergeRecipes(old: List<Recipe>, new: List<Recipe>): List<Recipe> {
@@ -114,7 +168,6 @@ class SupabaseRecipeRepository(
         }
     }
 
-    /** Сбросить флаги isFavorite во всех кэшах одним проходом. */
     private fun clearAllFavoriteFlags() {
         favoriteIdsCache.value = emptySet()
         recipesCache.value = recipesCache.value.clearFavoriteFlags()
@@ -127,7 +180,6 @@ class SupabaseRecipeRepository(
     private fun List<Recipe>.clearFavoriteFlags(): List<Recipe> =
         map { if (it.isFavorite) it.copy(isFavorite = false) else it }
 
-    /** Проставить isFavorite по актуальному favoriteIdsCache во всех кэшах. */
     private fun applyFavoriteFlags(ids: Set<String>) {
         recipesCache.value = recipesCache.value.applyFavoriteFlags(ids)
         weeklyRecipesCache.value = weeklyRecipesCache.value.applyFavoriteFlags(ids)
@@ -141,8 +193,6 @@ class SupabaseRecipeRepository(
             val shouldBeFav = r.id in ids
             if (r.isFavorite == shouldBeFav) r else r.copy(isFavorite = shouldBeFav)
         }
-
-    // ─── MainFeed (с пагинацией) ───
 
     private suspend fun refreshMainFeedSuspend(reset: Boolean): Boolean {
         if (reset) {
@@ -195,8 +245,6 @@ class SupabaseRecipeRepository(
         refreshMainFeedSuspend(reset = false)
     }
 
-    // ─── Weekly ───
-
     private suspend fun refreshWeeklySuspend(): Boolean {
         if (isWeeklyRefreshing) return true
         isWeeklyRefreshing = true
@@ -217,8 +265,6 @@ class SupabaseRecipeRepository(
             isWeeklyRefreshing = false
         }
     }
-
-    // ─── Секции ───
 
     private suspend fun refreshSectionsSuspend() {
         if (isSectionsRefreshing) return
@@ -253,19 +299,13 @@ class SupabaseRecipeRepository(
         }
     }
 
-    // ─── Favorites ───
-
     private suspend fun refreshFavoritesSuspend() {
-        val session = authRepository.ensureValidSession()
-        if (session == null) return
+        val session = authRepository.ensureValidSession() ?: return
         try {
             val ids = api.getFavoriteRecipeIds(session.accessToken, session.userId)
             favoriteIdsCache.value = ids
             applyFavoriteFlags(ids)
-        } catch (e: Throwable) {
-            // Логирование не через println — в release R8 всё равно вырежет android.util.Log
-            // Оставляем тихую обработку, чтобы не падать
-        }
+        } catch (e: Throwable) {}
     }
 
     private suspend fun uploadPhotoIfNeeded(
@@ -307,9 +347,46 @@ class SupabaseRecipeRepository(
         return storageApi.uploadPhoto(accessToken, randomName, bytes, contentType)
     }
 
-    suspend fun ensureValidSession(): UserSession? = authRepository.ensureValidSession()
+    suspend fun uploadAvatar(bytes: ByteArray, ext: String = "jpg"): String? {
+        val session = authRepository.ensureValidSession() ?: return null
+        val randomName = "avatar_${session.userId}_${currentTimeMillis()}.$ext"
+        val contentType = when (ext) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            else -> "image/jpeg"
+        }
+        val publicUrl = storageApi.uploadPhotoToBucket(
+            accessToken = session.accessToken,
+            bucket = "avatars",
+            fileName = randomName,
+            bytes = bytes,
+            contentType = contentType,
+        ) ?: return null
 
-    // ─── Чтение ───
+        val ok = api.updateProfileAvatar(session.accessToken, session.userId, publicUrl)
+        if (ok) {
+            avatarCache.value = avatarCache.value + (session.userId to publicUrl)
+            recipesCache.value = recipesCache.value.reapplyAvatars(avatarCache.value)
+            weeklyRecipesCache.value = weeklyRecipesCache.value.reapplyAvatars(avatarCache.value)
+            breakfastCache.value = breakfastCache.value.reapplyAvatars(avatarCache.value)
+            lunchCache.value = lunchCache.value.reapplyAvatars(avatarCache.value)
+            dinnerCache.value = dinnerCache.value.reapplyAvatars(avatarCache.value)
+        }
+        return if (ok) publicUrl else null
+    }
+
+    suspend fun uploadAvatar(localUri: String?): String? {
+        if (localUri.isNullOrBlank()) return null
+        val bytes = readFileBytes(localUri) ?: return null
+        val ext = when {
+            localUri.contains(".png", ignoreCase = true) -> "png"
+            localUri.contains(".webp", ignoreCase = true) -> "webp"
+            else -> "jpg"
+        }
+        return uploadAvatar(bytes, ext)
+    }
+
+    suspend fun ensureValidSession(): UserSession? = authRepository.ensureValidSession()
 
     override fun getMainFeed(tags: Set<String>, query: String): Flow<List<Recipe>> =
         recipesCache.map { list ->
@@ -350,13 +427,10 @@ class SupabaseRecipeRepository(
     override fun getFavorites(): Flow<List<Recipe>> =
         recipesCache.map { list -> list.filter { it.isFavorite } }
 
-    // ─── Избранное ───
-
     override suspend fun toggleFavorite(recipeId: String) {
         val session = authRepository.ensureValidSession() ?: return
         val isCurrentlyFavorite = recipeId in favoriteIdsCache.value
 
-        // Оптимистичное обновление
         val newIds = if (isCurrentlyFavorite) {
             favoriteIdsCache.value - recipeId
         } else {
@@ -364,7 +438,6 @@ class SupabaseRecipeRepository(
         }
         favoriteIdsCache.value = newIds
 
-        // Обновляем флаг только в тех кэшах, где реально есть этот рецепт
         recipesCache.value = recipesCache.value.toggleFavoriteFor(recipeId, !isCurrentlyFavorite)
         weeklyRecipesCache.value = weeklyRecipesCache.value.toggleFavoriteFor(recipeId, !isCurrentlyFavorite)
         breakfastCache.value = breakfastCache.value.toggleFavoriteFor(recipeId, !isCurrentlyFavorite)
@@ -390,8 +463,6 @@ class SupabaseRecipeRepository(
         }
         return if (mutated) result else this
     }
-
-    // ─── CRUD рецепта ───
 
     override suspend fun addRecipe(recipe: Recipe): String {
         val session = authRepository.ensureValidSession() ?: return ""
@@ -435,8 +506,6 @@ class SupabaseRecipeRepository(
         }
     }
 
-    // ─── Оценки ───
-
     override suspend fun addOrUpdateRating(recipeId: String, rating: Rating) {
         val session = authRepository.ensureValidSession() ?: return
 
@@ -450,6 +519,7 @@ class SupabaseRecipeRepository(
         if (result == null) return
 
         refreshWeeklySuspend()
+        refreshRatingsCountSuspend()
     }
 
     override suspend fun deleteRating(recipeId: String, userId: String) {
@@ -458,6 +528,7 @@ class SupabaseRecipeRepository(
         val ok = api.deleteRating(session.accessToken, recipeId, userId)
         if (ok) {
             refreshWeeklySuspend()
+            refreshRatingsCountSuspend()
         }
     }
 
@@ -483,20 +554,12 @@ class SupabaseRecipeRepository(
         return api.fetchSpotifyThumbnail(url)
     }
 
-    // ─── Обновление ───
-
     @Volatile
     private var lastRefreshTimeMs: Long = 0L
 
-    /**
-     * Автообновление при заходе на экран.
-     * Троттлинг 30 сек + защита от параллельных вызовов через @Volatile.
-     */
     suspend fun refreshIfStale(thresholdMs: Long = 30_000L) {
         val now = currentTimeMillis()
         if (now - lastRefreshTimeMs < thresholdMs) return
-
-        // Ставим время сразу, чтобы параллельные вызовы не прошли троттлинг
         lastRefreshTimeMs = now
 
         coroutineScope {
@@ -504,15 +567,13 @@ class SupabaseRecipeRepository(
             val r2 = async { refreshWeeklySuspend() }
             launch { refreshSectionsSuspend() }
             launch { refreshFavoritesSuspend() }
+            launch { refreshRatingsCountSuspend() }
+            launch { refreshProfilesSuspend() }
             r1.await()
             r2.await()
         }
     }
 
-    /**
-     * Полная перезагрузка. Используется кнопкой pull-to-refresh.
-     * Сбрасывает lastRefreshTimeMs, чтобы следующий refreshIfStale сработал.
-     */
     suspend fun refreshAll() {
         lastRefreshTimeMs = currentTimeMillis()
         coroutineScope {
@@ -520,6 +581,8 @@ class SupabaseRecipeRepository(
             launch { refreshWeeklySuspend() }
             launch { refreshSectionsSuspend() }
             launch { refreshFavoritesSuspend() }
+            launch { refreshRatingsCountSuspend() }
+            launch { refreshProfilesSuspend() }
         }
     }
 }

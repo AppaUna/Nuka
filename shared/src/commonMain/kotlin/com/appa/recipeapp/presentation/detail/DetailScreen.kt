@@ -64,6 +64,7 @@ import com.appa.recipeapp.ui.components.SkeletonDetailContent
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.ic_timer
+import com.appa.recipeapp.ui.components.AuthorAvatar
 
 /**
  * URL фото для DETAIL-экрана — оригинал, без transform.
@@ -284,6 +285,7 @@ private fun TitleCard(recipe: Recipe) {
         Spacer(Modifier.height(12.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Звёздочка + рейтинг
             Icon(
                 imageVector = Icons.Default.Star,
                 contentDescription = null,
@@ -300,11 +302,10 @@ private fun TitleCard(recipe: Recipe) {
 
             MetricDivider()
 
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = TextSecondary,
-                modifier = Modifier.size(14.dp),
+            // Аватарка + имя автора (НОВОЕ)
+            AuthorAvatar(
+                avatarUrl = recipe.authorAvatarUrl,
+                size = 16.dp,
             )
             Spacer(Modifier.width(4.dp))
             Text(
@@ -315,6 +316,7 @@ private fun TitleCard(recipe: Recipe) {
 
             MetricDivider()
 
+            // Время
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_timer),

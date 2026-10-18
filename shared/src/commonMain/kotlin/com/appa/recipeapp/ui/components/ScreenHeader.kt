@@ -38,7 +38,7 @@ fun ScreenHeader(
             .padding(horizontal = 16.dp)
             .padding(top = topPadding, bottom = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Column(
             modifier = Modifier

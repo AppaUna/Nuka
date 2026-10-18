@@ -5,6 +5,7 @@ import com.appa.recipeapp.data.model.Recipe
 data class ProfileState(
     val login: String = "",
     val displayName: String = "",
+    val avatarUrl: String? = null,
     val myRecipes: List<Recipe> = emptyList(),
     val recipesCount: Int = 0,
     val ratingsCount: Int = 0,

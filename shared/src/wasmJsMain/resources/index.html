@@ -11,6 +11,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Nuka">
 
+    <!-- theme-color для Android PWA (тёмная шторка) -->
+    <meta name="theme-color" content="#1a1a1a">
+
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
@@ -60,39 +63,25 @@
       'skiko.gpu.resourceCacheLimit': '1G'
     };
 </script>
-<!-- JS-помощники для передачи данных Kotlin ↔ JS -->
 <script>
-    // Для audio (Blob URL)
     window.nukaBytes = {
         buffer: null,
-        init: function(size) {
-            this.buffer = new Uint8Array(size);
-        },
-        set: function(index, value) {
-            this.buffer[index] = value;
-        },
+        init: function(size) { this.buffer = new Uint8Array(size); },
+        set: function(index, value) { this.buffer[index] = value; },
         toAudioUrl: function() {
             const blob = new Blob([this.buffer], { type: 'audio/mp4' });
             return URL.createObjectURL(blob);
         }
     };
-
-    // Для картинок (Blob URL для превью)
     window.nukaImage = {
         bytes: null,
-        init: function(size) {
-            this.bytes = new Uint8Array(size);
-        },
-        set: function(index, value) {
-            this.bytes[index] = value;
-        },
+        init: function(size) { this.bytes = new Uint8Array(size); },
+        set: function(index, value) { this.bytes[index] = value; },
         toBlobUrl: function() {
             const blob = new Blob([this.bytes], { type: 'image/jpeg' });
             return URL.createObjectURL(blob);
         }
     };
-
-    // Для canvas-энкода (ImageBitmap → JPEG)
     window.nukaCanvas = {
         encodeJpegSync: function(rgbaBytes, width, height, quality) {
             try {
@@ -100,12 +89,9 @@
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
-
                 const clamped = new Uint8ClampedArray(rgbaBytes.buffer, rgbaBytes.byteOffset, rgbaBytes.byteLength);
-
                 const imageData = new ImageData(clamped, width, height);
                 ctx.putImageData(imageData, 0, 0);
-
                 return canvas.toDataURL('image/jpeg', quality);
             } catch (e) {
                 console.error('encodeJpegSync error', e);
@@ -114,8 +100,6 @@
         }
     };
 </script>
-
-<!-- Разблокировка audio при первом взаимодействии (silent WAV) -->
 <script>
     (function() {
         var SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
@@ -124,39 +108,56 @@
             if (unlocked) return;
             unlocked = true;
             try {
-                if (!window.__nukaAudio) {
-                    window.__nukaAudio = new Audio();
-                }
+                if (!window.__nukaAudio) { window.__nukaAudio = new Audio(); }
                 window.__nukaAudio.src = SILENT_WAV;
                 window.__nukaAudio.play().then(function() {
                     window.__nukaAudio.pause();
                     window.__nukaAudio.currentTime = 0;
-                    console.log('Audio unlocked ✓');
-                }).catch(function(e) {
-                    console.log('Unlock audio error:', e);
-                });
-            } catch (e) {
-                console.log('Unlock audio exception:', e);
-            }
+                }).catch(function(e) {});
+            } catch (e) {}
         }
         document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
         document.addEventListener('click', unlockAudio, { once: true });
     })();
 </script>
-
-<!-- Скрипт приложения — генерируется webpack как nuka.js -->
 <script src="nuka.js"></script>
-
-<!-- Service Worker -->
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/sw.js')
-                .then((reg) => console.log('SW registered:', reg.scope))
+                .then((reg) => {
+                    console.log('SW registered:', reg.scope);
+                    // Принудительная проверка обновлений при каждом открытии
+                    reg.update();
+                })
                 .catch((err) => console.error('SW error:', err));
         });
     }
 </script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then((reg) => {
+                    console.log('SW registered:', reg.scope);
+                    // Проверка обновлений при каждой загрузке
+                    reg.update();
 
+                    // Обработка нового SW: активация без перезагрузки
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        if (!newWorker) return;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // Новый SW установлен, активируем
+                                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        });
+                    });
+                })
+                .catch((err) => console.error('SW error:', err));
+        });
+    }
+</script>
 </body>
 </html>

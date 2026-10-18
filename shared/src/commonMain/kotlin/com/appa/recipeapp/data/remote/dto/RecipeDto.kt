@@ -19,6 +19,8 @@ data class RecipeDto(
     val authorId: String = "",
     @SerialName("author_name")
     val authorName: String = "",
+    @SerialName("author_avatar_url")
+    val authorAvatarUrl: String? = null,
     val title: String = "",
     val description: String = "",
     @SerialName("cooking_time_minutes")
@@ -99,6 +101,18 @@ data class RatingDto(
     val userName: String? = null,
 )
 
+@Immutable
+@Serializable
+data class ProfileDto(
+    val id: String = "",
+    @SerialName("avatar_url")
+    val avatarUrl: String? = null,
+    @SerialName("display_name")
+    val displayName: String? = null,
+    @SerialName("name_color")
+    val nameColor: String? = null,
+)
+
 private val dtoJson = Json { ignoreUnknownKeys = true }
 
 /** Размер превью для карточек — 512px достаточно на любом экране. */
@@ -106,15 +120,6 @@ private const val PREVIEW_SIZE = 512
 
 /**
  * Преобразует оригинальный URL фото в URL Supabase Storage Transform.
- *
- * Работает только для Supabase Storage public URL. Если URL ведёт на другой
- * домен или уже является render-URL — возвращается как есть.
- *
- * Формат Supabase Storage Transform:
- *   /storage/v1/object/public/<bucket>/<file>
- *   → /storage/v1/render/image/public/<bucket>/<file>?width=...&height=...&resize=cover&quality=...
- *
- * Под капотом запрос уходит в imgproxy, который уменьшает фото на лету.
  */
 private fun transformPhotoUrl(originalUrl: String): String {
     val marker = "/storage/v1/object/public/"
@@ -124,10 +129,14 @@ private fun transformPhotoUrl(originalUrl: String): String {
     return "$renderUrl?width=$PREVIEW_SIZE&height=$PREVIEW_SIZE&resize=cover&quality=80"
 }
 
-fun RecipeDto.toDomain(favoriteIds: Set<String> = emptySet()): Recipe = Recipe(
+fun RecipeDto.toDomain(
+    favoriteIds: Set<String> = emptySet(),
+    avatarOverride: String? = null,
+): Recipe = Recipe(
     id = id,
     authorId = authorId,
     authorName = authorName.ifBlank { "Аноним" },
+    authorAvatarUrl = avatarOverride ?: authorAvatarUrl,
     title = title,
     description = description,
     ingredients = parseIngredients(ingredients),
@@ -180,7 +189,6 @@ private fun parseIngredients(element: JsonElement?): List<Ingredient> {
     return try {
         element.map { dtoJson.decodeFromJsonElement(Ingredient.serializer(), it) }
     } catch (e: Throwable) {
-        println("DEBUG parseIngredients failed: ${e.message}")
         emptyList()
     }
 }
@@ -190,7 +198,6 @@ private fun parseSteps(element: JsonElement?): List<RecipeStep> {
     return try {
         element.map { dtoJson.decodeFromJsonElement(RecipeStep.serializer(), it) }
     } catch (e: Throwable) {
-        println("DEBUG parseSteps failed: ${e.message}")
         emptyList()
     }
 }
@@ -200,7 +207,6 @@ private fun parseMusicTracks(element: JsonElement?): List<MusicTrack> {
     return try {
         element.map { dtoJson.decodeFromJsonElement(MusicTrack.serializer(), it) }
     } catch (e: Throwable) {
-        println("DEBUG parseMusicTracks failed: ${e.message}")
         emptyList()
     }
 }

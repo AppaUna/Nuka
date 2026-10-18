@@ -15,6 +15,7 @@ import com.appa.recipeapp.data.remote.SupabaseStorageApi
 import com.appa.recipeapp.data.repository.RecipeRepository
 import com.appa.recipeapp.data.repository.SupabaseAuthRepository
 import com.appa.recipeapp.data.repository.SupabaseRecipeRepository
+import com.appa.recipeapp.data.repository.ThemeRepository
 import com.appa.recipeapp.data.repository.UserPreferencesRepository
 import com.appa.recipeapp.navigation.AppNavHost
 import com.appa.recipeapp.platform.createImageLoader
@@ -22,13 +23,15 @@ import com.appa.recipeapp.platform.createSettings
 import com.appa.recipeapp.presentation.favorites.FavoritesViewModel
 import com.appa.recipeapp.presentation.home.HomeViewModel
 import com.appa.recipeapp.ui.theme.AppTheme
-import com.appa.recipeapp.ui.theme.Background
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.KoinApplication
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.bg_texture
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import org.koin.compose.koinInject
 
 private val appModule = module {
     single { SupabaseClient() }
@@ -37,6 +40,7 @@ private val appModule = module {
     single { SupabaseRecipeApi(get()) }
     single { SupabaseStorageApi(get()) }
     single { UserPreferencesRepository(settings = createSettings()) }
+    single { ThemeRepository(settings = createSettings()) }
     single<RecipeRepository> {
         SupabaseRecipeRepository(
             api = get(),
@@ -64,7 +68,10 @@ private val appModule = module {
 @Composable
 fun App() {
     KoinApplication(application = { modules(appModule) }) {
-        AppTheme {
+        val themeRepository: ThemeRepository = koinInject()
+        val currentTheme by themeRepository.currentTheme.collectAsState()
+
+        AppTheme(theme = currentTheme) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Image(
                     painter = painterResource(Res.drawable.bg_texture),
@@ -75,7 +82,7 @@ fun App() {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Background.copy(alpha = 0.88f)),
+                        .background(currentTheme.colors.background.copy(alpha = 0.88f)),
                 )
                 AppNavHost()
             }
