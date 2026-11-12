@@ -1,0 +1,6 @@
+
+# Игнорировать сгенерированные файлы в статистике языков
+**/build/** linguist-vendored
+**/kotlin-js-store/** linguist-vendored
+**/*.js linguist-vendored
+**/*.wasm linguist-vendored
