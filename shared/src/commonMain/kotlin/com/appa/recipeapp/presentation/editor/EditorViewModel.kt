@@ -10,6 +10,7 @@ import com.appa.recipeapp.data.repository.RecipeRepository
 import com.appa.recipeapp.data.repository.SupabaseRecipeRepository
 import com.appa.recipeapp.utils.MusicSource
 import com.appa.recipeapp.utils.MusicSourceDetector
+import com.russhwolf.settings.Settings
 import io.github.vinceglb.filekit.PlatformFile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,29 +20,110 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import com.appa.recipeapp.data.model.currentTimeMillis
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 class EditorViewModel(
     private val repository: RecipeRepository,
     private val recipeId: String?,
+    private val settings: Settings,
     private val onSaveSuccess: (String) -> Unit,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState(recipeId = recipeId))
     val state: StateFlow<EditorState> = _state.asStateFlow()
+    private val _movingStepId = MutableStateFlow<Long?>(null)
+    val movingStepId: StateFlow<Long?> = _movingStepId.asStateFlow()
 
     private var nextIngredientId = 1L
     private var nextStepId = 1L
     private var nextTrackId = 0L
+    private var isExiting = false
 
     private var pendingStepId: Long? = null
     private val thumbnailJobs = mutableMapOf<Long, Job>()
+    private val json = Json { ignoreUnknownKeys = true }
 
     init {
-        println("DEBUG EditorViewModel: init, recipeId=$recipeId")
         loadAllTags()
         if (recipeId != null) {
             loadExistingRecipe(recipeId)
+        } else {
+            restoreDraft()
         }
+
+        _state.onEach { currentState ->
+            if (recipeId == null && !isExiting && !currentState.isLoading && !currentState.isSaving && currentState.hasChanges) {
+                saveDraftImmediate(currentState)
+            }
+        }.launchIn(viewModelScope)
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun saveDraftImmediate(state: EditorState) {
+        try {
+            // --- ЛОГИ ---
+            val mainPhotoSize = state.photoBytes?.size ?: 0
+            val stepsPhotoSize = state.steps.sumOf { it.photoBytes?.size ?: 0 }
+            println("NUKA_DEBUG: Байты главного фото в стейте = $mainPhotoSize")
+            println("NUKA_DEBUG: Байты фото шагов в стейте = $stepsPhotoSize")
+            // -----------
+
+            val stateToSave = state.copy(
+                photoBase64 = state.photoBytes?.let { Base64.encode(it) },
+                steps = state.steps.map { step ->
+                    step.copy(photoBase64 = step.photoBytes?.let { Base64.encode(it) })
+                }
+            )
+            val draftJson = json.encodeToString(EditorState.serializer(), stateToSave)
+            println("NUKA_DEBUG: Размер JSON черновика (Base64) = ${draftJson.length} символов")
+            settings.putString("draft_recipe", draftJson)
+            settings.putLong("draft_time", currentTimeMillis())
+        } catch (e: Throwable) {
+            println("NUKA_DEBUG: Ошибка сохранения черновика: ${e.message}")
+        }
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun restoreDraft() {
+        val draftStr = settings.getStringOrNull("draft_recipe")
+        if (draftStr.isNullOrBlank()) {
+            println("NUKA_DEBUG: Черновик пуст")
+            return
+        }
+
+        println("NUKA_DEBUG: Прочитан черновик длиной ${draftStr.length} символов")
+
+        val draftTime = settings.getLong("draft_time", 0L)
+        if (currentTimeMillis() - draftTime > 259_200_000L) {
+            clearDraft()
+            return
+        }
+        try {
+            val draftState = json.decodeFromString(EditorState.serializer(), draftStr)
+            val restoredState = draftState.copy(
+                isDraftRestored = true,
+                allTags = _state.value.allTags,
+                photoBytes = draftState.photoBase64?.let { Base64.decode(it) },
+                steps = draftState.steps.map { step ->
+                    step.copy(photoBytes = step.photoBase64?.let { Base64.decode(it) })
+                }
+            )
+            println("NUKA_DEBUG: Восстановлено фото шагов: ${restoredState.steps.count { it.photoBytes != null }}")
+            _state.value = restoredState
+            nextIngredientId = (draftState.ingredients.maxOfOrNull { it.id } ?: 0L) + 1
+            nextStepId = (draftState.steps.maxOfOrNull { it.id } ?: 0L) + 1
+            nextTrackId = (draftState.musicTracks.maxOfOrNull { it.id } ?: 0L) + 1
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
+    fun clearDraft() {
+        settings.remove("draft_recipe")
+        settings.remove("draft_time")
     }
 
     private fun loadAllTags() {
@@ -72,18 +154,14 @@ class EditorViewModel(
                             name = ing.name,
                             quantity = "${ing.amount} ${ing.unit}".trim(),
                         )
-                    }.ifEmpty {
-                        listOf(IngredientDraft(id = 0L))
-                    },
+                    }.ifEmpty { listOf(IngredientDraft(id = 0L)) },
                     steps = recipe.steps.mapIndexed { index, step ->
                         StepDraft(
                             id = index.toLong(),
                             text = step.text,
                             photoUri = step.photoUrl,
                         )
-                    }.ifEmpty {
-                        listOf(StepDraft(id = 0L))
-                    },
+                    }.ifEmpty { listOf(StepDraft(id = 0L)) },
                     allTags = _state.value.allTags,
                     selectedTags = recipe.tags.toSet(),
                     musicNote = recipe.musicNote,
@@ -105,198 +183,120 @@ class EditorViewModel(
             .launchIn(viewModelScope)
     }
 
-    // ─── Основные поля ───
-
-    fun onTitleChange(text: String) {
-        _state.value = _state.value.copy(title = text)
-    }
-
-    fun onDescriptionChange(text: String) {
-        _state.value = _state.value.copy(description = text)
-    }
-
+    fun onTitleChange(text: String) { _state.value = _state.value.copy(title = text) }
+    fun onDescriptionChange(text: String) { _state.value = _state.value.copy(description = text) }
     fun onCookingTimeChange(text: String) {
         val digits = text.filter { it.isDigit() }
         _state.value = _state.value.copy(cookingTime = digits)
     }
+    fun onNotesChange(text: String) { _state.value = _state.value.copy(notes = text) }
 
-    fun onNotesChange(text: String) {
-        _state.value = _state.value.copy(notes = text)
-    }
-
-    // ─── Ингредиенты ───
-
-    fun addIngredient() {
-        val newList = _state.value.ingredients + IngredientDraft(id = nextIngredientId++)
-        _state.value = _state.value.copy(ingredients = newList)
-    }
-
+    fun addIngredient() { _state.value = _state.value.copy(ingredients = _state.value.ingredients + IngredientDraft(id = nextIngredientId++)) }
     fun removeIngredient(id: Long) {
         val newList = _state.value.ingredients.filterNot { it.id == id }
-        _state.value = _state.value.copy(
-            ingredients = newList.ifEmpty { listOf(IngredientDraft(id = nextIngredientId++)) },
-        )
+        _state.value = _state.value.copy(ingredients = newList.ifEmpty { listOf(IngredientDraft(id = nextIngredientId++)) })
     }
-
     fun updateIngredientName(id: Long, name: String) {
-        _state.value = _state.value.copy(
-            ingredients = _state.value.ingredients.map {
-                if (it.id == id) it.copy(name = name) else it
-            },
-        )
+        _state.value = _state.value.copy(ingredients = _state.value.ingredients.map { if (it.id == id) it.copy(name = name) else it })
     }
-
     fun updateIngredientQuantity(id: Long, quantity: String) {
-        _state.value = _state.value.copy(
-            ingredients = _state.value.ingredients.map {
-                if (it.id == id) it.copy(quantity = quantity) else it
-            },
-        )
+        _state.value = _state.value.copy(ingredients = _state.value.ingredients.map { if (it.id == id) it.copy(quantity = quantity) else it })
     }
 
-    // ─── Шаги ───
-
-    fun addStep() {
-        val newList = _state.value.steps + StepDraft(id = nextStepId++)
-        _state.value = _state.value.copy(steps = newList)
-    }
-
+    fun addStep() { _state.value = _state.value.copy(steps = _state.value.steps + StepDraft(id = nextStepId++)) }
     fun removeStep(id: Long) {
         val newList = _state.value.steps.filterNot { it.id == id }
-        _state.value = _state.value.copy(
-            steps = newList.ifEmpty { listOf(StepDraft(id = nextStepId++)) },
-        )
+        _state.value = _state.value.copy(steps = newList.ifEmpty { listOf(StepDraft(id = nextStepId++)) })
     }
-
     fun updateStep(id: Long, text: String) {
-        _state.value = _state.value.copy(
-            steps = _state.value.steps.map {
-                if (it.id == id) it.copy(text = text) else it
-            },
-        )
+        _state.value = _state.value.copy(steps = _state.value.steps.map { if (it.id == id) it.copy(text = text) else it })
     }
 
-    fun onStepPhotoClicked(stepId: Long) {
-        pendingStepId = stepId
+    fun moveStepUp(id: Long) {
+        _movingStepId.value = id
+        val steps = _state.value.steps.toMutableList()
+        val index = steps.indexOfFirst { it.id == id }
+        if (index > 0) {
+            val item = steps.removeAt(index)
+            steps.add(index - 1, item)
+            _state.value = _state.value.copy(steps = steps)
+        }
+        viewModelScope.launch { delay(300); _movingStepId.value = null }
     }
 
+    fun moveStepDown(id: Long) {
+        _movingStepId.value = id
+        val steps = _state.value.steps.toMutableList()
+        val index = steps.indexOfFirst { it.id == id }
+        if (index != -1 && index < steps.size - 1) {
+            val item = steps.removeAt(index)
+            steps.add(index + 1, item)
+            _state.value = _state.value.copy(steps = steps)
+        }
+        viewModelScope.launch { delay(300); _movingStepId.value = null }
+    }
+
+    fun onStepPhotoClicked(stepId: Long) { pendingStepId = stepId }
     fun getPendingStepId(): Long? = pendingStepId
-
-    // ─── Кроп фото ───
-
     fun onCropStart(file: PlatformFile, stepId: Long? = null) {
-        _state.value = _state.value.copy(
-            isCropping = true,
-            croppingFile = file,
-            croppingForStepId = stepId,
-        )
+        _state.value = _state.value.copy(isCropping = true, croppingFile = file, croppingForStepId = stepId)
     }
-
-    fun onCropConfirm(bytes: ByteArray) {
+    fun onCropConfirm(bytes: ByteArray, cropRecipe: String? = null) {
         val stepId = _state.value.croppingForStepId
         if (stepId == null) {
             _state.value = _state.value.copy(
                 photoBytes = bytes,
+                photoCropRecipe = cropRecipe,
                 isCropping = false,
                 croppingFile = null,
-                croppingForStepId = null,
+                croppingForStepId = null
             )
         } else {
             _state.value = _state.value.copy(
                 steps = _state.value.steps.map {
-                    if (it.id == stepId) it.copy(photoBytes = bytes) else it
+                    if (it.id == stepId) it.copy(photoBytes = bytes, photoCropRecipe = cropRecipe) else it
                 },
                 isCropping = false,
                 croppingFile = null,
-                croppingForStepId = null,
+                croppingForStepId = null
             )
         }
     }
+    fun onCropCancel() { _state.value = _state.value.copy(isCropping = false, croppingFile = null, croppingForStepId = null) }
 
-    fun onCropCancel() {
-        _state.value = _state.value.copy(
-            isCropping = false,
-            croppingFile = null,
-            croppingForStepId = null,
-        )
-    }
-
-    /** Удалить главное фото (сброс photoBytes и photoUri). */
-    fun removeMainPhoto() {
-        println("DEBUG removeMainPhoto ВЫЗВАН")
-        _state.value = _state.value.copy(
-            photoBytes = null,
-            photoUri = null,
-        )
-        println("DEBUG removeMainPhoto: photoBytes=${_state.value.photoBytes}, photoUri=${_state.value.photoUri}")
-    }
-
-    /** Удалить фото у шага. */
+    fun removeMainPhoto() { _state.value = _state.value.copy(photoBytes = null, photoUri = null, photoCropRecipe = null) }
     fun removeStepPhoto(stepId: Long) {
-        _state.value = _state.value.copy(
-            steps = _state.value.steps.map {
-                if (it.id == stepId) it.copy(photoBytes = null, photoUri = null) else it
-            },
-        )
+        _state.value = _state.value.copy(steps = _state.value.steps.map { if (it.id == stepId) it.copy(photoBytes = null, photoUri = null, photoCropRecipe = null) else it })
     }
-
-    // ─── Теги ───
 
     fun toggleTag(tag: String) {
         val current = _state.value.selectedTags
         val updated = if (tag in current) current - tag else current + tag
         _state.value = _state.value.copy(selectedTags = updated)
     }
-
-    fun onNewTagChange(text: String) {
-        _state.value = _state.value.copy(newTagDraft = text)
-    }
-
+    fun onNewTagChange(text: String) { _state.value = _state.value.copy(newTagDraft = text) }
     fun addNewTag() {
         val tag = _state.value.newTagDraft.trim().lowercase()
         if (tag.isBlank()) return
-        val updatedTags = (_state.value.selectedTags + tag)
-        val updatedAllTags = (_state.value.allTags + tag).distinct().sorted()
         _state.value = _state.value.copy(
-            selectedTags = updatedTags,
-            allTags = updatedAllTags,
+            selectedTags = (_state.value.selectedTags + tag),
+            allTags = (_state.value.allTags + tag).distinct().sorted(),
             newTagDraft = "",
         )
     }
 
-    // ─── Музыка ───
-
-    fun onMusicNoteChange(text: String) {
-        _state.value = _state.value.copy(musicNote = text)
-    }
-
-    fun addMusicTrack() {
-        val newList = _state.value.musicTracks + MusicTrackDraft(id = nextTrackId++)
-        _state.value = _state.value.copy(musicTracks = newList)
-    }
-
+    fun onMusicNoteChange(text: String) { _state.value = _state.value.copy(musicNote = text) }
+    fun addMusicTrack() { _state.value = _state.value.copy(musicTracks = _state.value.musicTracks + MusicTrackDraft(id = nextTrackId++)) }
     fun removeMusicTrack(id: Long) {
         thumbnailJobs[id]?.cancel()
         thumbnailJobs.remove(id)
-        _state.value = _state.value.copy(
-            musicTracks = _state.value.musicTracks.filterNot { it.id == id },
-        )
+        _state.value = _state.value.copy(musicTracks = _state.value.musicTracks.filterNot { it.id == id })
     }
-
     fun updateMusicTrackTitle(id: Long, title: String) {
-        _state.value = _state.value.copy(
-            musicTracks = _state.value.musicTracks.map {
-                if (it.id == id) it.copy(title = title) else it
-            },
-        )
+        _state.value = _state.value.copy(musicTracks = _state.value.musicTracks.map { if (it.id == id) it.copy(title = title) else it })
     }
-
     fun updateMusicTrackUrl(id: Long, url: String) {
-        _state.value = _state.value.copy(
-            musicTracks = _state.value.musicTracks.map {
-                if (it.id == id) it.copy(url = url, thumbnailUrl = "") else it
-            },
-        )
+        _state.value = _state.value.copy(musicTracks = _state.value.musicTracks.map { if (it.id == id) it.copy(url = url, thumbnailUrl = "") else it })
         tryFetchThumbnail(id, url)
     }
 
@@ -310,79 +310,72 @@ class EditorViewModel(
             val repo = repository as? SupabaseRecipeRepository ?: return@launch
             val thumbnail = repo.fetchThumbnailFor(url)
             if (thumbnail != null) {
-                _state.value = _state.value.copy(
-                    musicTracks = _state.value.musicTracks.map {
-                        if (it.id == trackId) it.copy(thumbnailUrl = thumbnail) else it
-                    },
-                )
+                _state.value = _state.value.copy(musicTracks = _state.value.musicTracks.map { if (it.id == trackId) it.copy(thumbnailUrl = thumbnail) else it })
             }
         }
     }
 
-    // ─── Диалог отмены ───
-
     fun onBackPressed() {
-        _state.value = _state.value.copy(showExitDialog = true)
+        if (_state.value.hasChanges) {
+            _state.value = _state.value.copy(showExitDialog = true)
+        }
     }
 
-    fun dismissExitDialog() {
+    fun cancelExit() {
         _state.value = _state.value.copy(showExitDialog = false)
     }
 
-    // ─── Сохранение ───
+    fun saveDraftAndExit(onExit: () -> Unit) {
+        isExiting = true
+        if (recipeId == null) {
+            saveDraftImmediate(_state.value)
+        }
+        _state.value = _state.value.copy(showExitDialog = false)
+        onExit()
+    }
+
+    fun exitWithoutSaving(onExit: () -> Unit) {
+        isExiting = true
+        if (recipeId == null) {
+            clearDraft()
+        }
+        _state.value = _state.value.copy(showExitDialog = false)
+        onExit()
+    }
 
     fun save() {
-        println("DEBUG save() ВЫЗВАН, isValid=${_state.value.isValid}")
         if (!_state.value.isValid) return
-
         val s = _state.value
         viewModelScope.launch {
             try {
                 val hasNewPhoto = s.photoBytes != null
-                _state.value = s.copy(
-                    isSaving = true,
-                    saveStatus = if (hasNewPhoto) SaveStatus.UPLOADING_PHOTO else SaveStatus.SAVING_RECIPE,
-                )
+                _state.value = s.copy(isSaving = true, saveStatus = if (hasNewPhoto) SaveStatus.UPLOADING_PHOTO else SaveStatus.SAVING_RECIPE)
 
                 val repo = repository as? SupabaseRecipeRepository ?: run {
-                    println("DEBUG save(): repository не SupabaseRecipeRepository")
                     _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE)
                     return@launch
                 }
-
                 val session = repo.ensureValidSession() ?: run {
-                    println("DEBUG save(): сессия невалидна")
                     _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE)
                     return@launch
                 }
 
-                // ─── Главное фото ───
                 val photoUrls: List<String> = when {
                     s.photoBytes != null -> {
                         val url = repo.uploadPhotoBytes(session.accessToken, s.photoBytes)
                         if (url != null) listOf(url) else emptyList()
                     }
-                    !s.photoUri.isNullOrBlank() && (s.photoUri.startsWith("http://") || s.photoUri.startsWith("https://")) -> {
-                        listOf(s.photoUri)
-                    }
-                    else -> {
-                        // Фото удалено — отправляем пустую строку, чтобы PostgREST обновил
-                        if (s.recipeId != null) listOf("") else emptyList()
-                    }
+                    !s.photoUri.isNullOrBlank() && (s.photoUri.startsWith("http://") || s.photoUri.startsWith("https://")) -> listOf(s.photoUri)
+                    else -> if (s.recipeId != null) listOf("") else emptyList()
                 }
 
                 _state.value = _state.value.copy(saveStatus = SaveStatus.SAVING_RECIPE)
 
-                // ─── Шаги с фото ───
                 val steps = mutableListOf<RecipeStep>()
                 for (draft in s.steps.filter { it.text.isNotBlank() }) {
                     val stepPhotoUrl: String? = when {
-                        draft.photoBytes != null -> {
-                            repo.uploadPhotoBytes(session.accessToken, draft.photoBytes)
-                        }
-                        !draft.photoUri.isNullOrBlank() && (draft.photoUri.startsWith("http://") || draft.photoUri.startsWith("https://")) -> {
-                            draft.photoUri
-                        }
+                        draft.photoBytes != null -> repo.uploadPhotoBytes(session.accessToken, draft.photoBytes)
+                        !draft.photoUri.isNullOrBlank() && (draft.photoUri.startsWith("http://") || draft.photoUri.startsWith("https://")) -> draft.photoUri
                         else -> null
                     }
                     steps.add(RecipeStep(text = draft.text.trim(), photoUrl = stepPhotoUrl))
@@ -397,13 +390,7 @@ class EditorViewModel(
 
                 val musicTracks = s.musicTracks
                     .filter { it.url.isNotBlank() }
-                    .map { draft ->
-                        MusicTrack(
-                            title = draft.title.trim(),
-                            url = draft.url.trim(),
-                            thumbnailUrl = draft.thumbnailUrl,
-                        )
-                    }
+                    .map { draft -> MusicTrack(title = draft.title.trim(), url = draft.url.trim(), thumbnailUrl = draft.thumbnailUrl) }
 
                 val recipe = Recipe(
                     id = s.recipeId ?: "",
@@ -422,25 +409,17 @@ class EditorViewModel(
                     createdAt = 0L,
                 )
 
-                val savedId: String = if (s.recipeId == null) {
-                    repository.addRecipe(recipe)
-                } else {
-                    repository.updateRecipe(recipe)
-                    s.recipeId
-                }
+                val savedId: String = if (s.recipeId == null) repository.addRecipe(recipe)
+                else { repository.updateRecipe(recipe); s.recipeId }
 
-                _state.value = _state.value.copy(
-                    isSaving = false,
-                    saveStatus = SaveStatus.IDLE,
-                    savedRecipeId = savedId,
-                )
+                _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE, savedRecipeId = savedId)
 
                 if (savedId.isNotBlank()) {
+                    isExiting = true
+                    clearDraft()
                     onSaveSuccess(savedId)
                 }
             } catch (e: Throwable) {
-                println("DEBUG save() EXCEPTION: ${e::class.simpleName} — ${e.message}")
-                e.printStackTrace()
                 _state.value = _state.value.copy(isSaving = false, saveStatus = SaveStatus.IDLE)
             }
         }
@@ -449,17 +428,10 @@ class EditorViewModel(
     private fun splitQuantity(input: String): Pair<String, String> {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return "" to ""
-
         val spaceIndex = trimmed.indexOf(' ')
         if (spaceIndex == -1) return trimmed to ""
-
         val amount = trimmed.substring(0, spaceIndex).trim()
         val unit = trimmed.substring(spaceIndex + 1).trim()
-
-        return if (amount.firstOrNull()?.isDigit() == true) {
-            amount to unit
-        } else {
-            trimmed to ""
-        }
+        return if (amount.firstOrNull()?.isDigit() == true) amount to unit else trimmed to ""
     }
 }

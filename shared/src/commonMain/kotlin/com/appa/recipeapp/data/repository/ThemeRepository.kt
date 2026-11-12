@@ -12,21 +12,16 @@ class ThemeRepository(private val settings: Settings) {
     val currentTheme: StateFlow<NukaTheme> = _currentTheme.asStateFlow()
 
     fun setTheme(themeId: String) {
-        if (themeId == HalloweenThemePlaceholder.id) return // заглушка
-        val theme = getThemeById(themeId)
-        _currentTheme.value = theme
-        settings.putString(KEY_THEME, themeId)
+        // Пока что смена темы отключена, всегда используем DefaultTheme
+        // if (themeId == HalloweenThemePlaceholder.id) return
+        // val theme = getThemeById(themeId)
+        // _currentTheme.value = theme
+        // settings.putString(KEY_THEME, themeId)
     }
 
     private fun loadTheme(): NukaTheme {
-        val id = settings.getString(KEY_THEME, DefaultTheme.id)
-        return getThemeById(id)
-    }
-
-    private fun getThemeById(id: String): NukaTheme = when (id) {
-        FalloutTheme.id -> FalloutTheme
-        CreamGardenTheme.id -> CreamGardenTheme
-        else -> DefaultTheme
+        // Всегда возвращаем DefaultTheme
+        return DefaultTheme
     }
 
     companion object {

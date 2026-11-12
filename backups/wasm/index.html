@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Nuka</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Nuka">
+    <meta name="theme-color" content="#1a1a1a">
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+    <style>
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: #1a1a1a;
+            -webkit-user-select: none; user-select: none;
+            -webkit-touch-callout: none;
+        }
+        input, textarea {
+            -webkit-user-select: auto !important; user-select: auto !important;
+            -webkit-touch-callout: default !important;
+        }
+        #compose-root { width: 100vw; height: 100vh; }
+        .loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .loading-logo {
+            width: 140px; height: 140px; object-fit: contain;
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Кнопка уведомлений для iOS PWA */
+        #ios-push-btn {
+            display: none; /* Изначально скрыта */
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99999;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(40, 40, 40, 0.95);
+            border: 2px solid #777;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transition: border-color 0.3s, transform 0.2s;
+        }
+        #ios-push-btn:active {
+            transform: translateX(-50%) scale(0.92);
+        }
+        #ios-push-btn svg {
+            width: 22px;
+            height: 22px;
+            stroke: #ccc;
+            transition: stroke 0.3s;
+        }
+        #ios-push-btn.enabled {
+            border-color: #A3E635;
+        }
+        #ios-push-btn.enabled svg {
+            stroke: #A3E635;
+        }
+    </style>
+</head>
+<body>
+<div id="compose-root">
+    <div class="loading">
+        <img src="logo.webp" alt="Nuka" class="loading-logo">
+    </div>
+</div>
+
+<!-- Кнопка уведомлений для iOS PWA -->
+<button id="ios-push-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+    </svg>
+</button>
+
+<script>
+    window.skikoProperties = {
+      'skiko.gpu.resourceCacheLimit': '1G'
+    };
+</script>
+<script>
+    window.nukaBytes = {
+        buffer: null,
+        init: function(size) { this.buffer = new Uint8Array(size); },
+        set: function(index, value) { this.buffer[index] = value; },
+        toAudioUrl: function() {
+            const blob = new Blob([this.buffer], { type: 'audio/mp4' });
+            return URL.createObjectURL(blob);
+        }
+    };
+    window.nukaImage = {
+        bytes: null,
+        init: function(size) { this.bytes = new Uint8Array(size); },
+        set: function(index, value) { this.bytes[index] = value; },
+        toBlobUrl: function() {
+            const blob = new Blob([this.bytes], { type: 'image/jpeg' });
+            return URL.createObjectURL(blob);
+        }
+    };
+    window.nukaCanvas = {
+        encodeJpegSync: function(rgbaBytes, width, height, quality) {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                const clamped = new Uint8ClampedArray(rgbaBytes.buffer, rgbaBytes.byteOffset, rgbaBytes.byteLength);
+                const imageData = new ImageData(clamped, width, height);
+                ctx.putImageData(imageData, 0, 0);
+                return canvas.toDataURL('image/jpeg', quality);
+            } catch (e) {
+                console.error('encodeJpegSync error', e);
+                return '';
+            }
+        }
+    };
+</script>
+
+<script>window.requestPushPermission = function() { console.log('Push: Заглушка'); };</script>
+
+<script src="nuka_v22.js"></script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then((reg) => { console.log('SW registered:', reg.scope); reg.update(); })
+                .catch((err) => console.error('SW error:', err));
+        });
+    }
+</script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then((reg) => {
+                    console.log('SW registered:', reg.scope);
+                    reg.update();
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        if (!newWorker) return;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        });
+                    });
+                })
+                .catch((err) => console.error('SW error:', err));
+        });
+    }
+</script>
+<script>
+    document.addEventListener('contextmenu', function(e) {
+        var target = e.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+            e.stopPropagation();
+        }
+    }, true);
+
+    const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNTU2NTk3LCJleHAiOjIxMDY5MTY1OTd9.7uo_yuo7gtD0UqStd4TKbjee1lhHkz_lCSLmBRCTgyI';
+
+    window.requestPushPermission = async function() {
+        console.log('Push: Запрос разрешения...');
+        if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+            alert('Ваше устройство не поддерживает уведомления.');
+            return;
+        }
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') { console.log('Push: Разрешение не получено'); return; }
+            const registration = await navigator.serviceWorker.ready;
+            const response = await fetch('/push-api/vapid-public-key');
+            const vapidPublicKey = await response.text();
+            const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
+            const userId = localStorage.getItem('nuka_user_id');
+            if (!userId) { console.warn('Push: Нет user_id'); alert('Ошибка: не удалось определить пользователя. Попробуйте перезайти.'); return; }
+            const subJson = subscription.toJSON();
+            await fetch(`https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions?user_id=eq.${userId}`, { method: 'DELETE', headers: { 'apikey': ANON_KEY } });
+            const res = await fetch('https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions', {
+                method: 'POST',
+                headers: { 'apikey': ANON_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+                body: JSON.stringify({ user_id: userId, endpoint: subJson.endpoint, p256dh: subJson.keys.p256dh, auth: subJson.keys.auth })
+            });
+            if (!res.ok) { const errorText = await res.text(); console.error('Push: Ошибка сохранения:', errorText); alert('Ошибка при сохранении подписки.'); return; }
+            localStorage.setItem('push_enabled', 'true');
+            console.log('Push: Подписка успешно сохранена!');
+            alert('Уведомления включены!');
+            hideIosPushButton();
+        } catch (e) { console.error('Push: Ошибка подписки', e); alert('Ошибка при включении уведомлений.'); }
+    };
+
+    window.disablePushPermission = async function() {
+        console.log('Push: Отключение уведомлений...');
+        try {
+            const userId = localStorage.getItem('nuka_user_id');
+            if (!userId) { console.warn('Push: Нет user_id'); return; }
+            await fetch(`https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions?user_id=eq.${userId}`, { method: 'DELETE', headers: { 'apikey': ANON_KEY } });
+            const registration = await navigator.serviceWorker.ready;
+            const subscription = await registration.pushManager.getSubscription();
+            if (subscription) { await subscription.unsubscribe(); }
+            localStorage.setItem('push_enabled', 'false');
+            alert('Уведомления выключены!');
+        } catch (e) { console.error('Push: Ошибка отключения', e); alert('Ошибка при отключении уведомлений.'); }
+    };
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+        return outputArray;
+    }
+
+    // === ЛОГИКА ДЛЯ iOS PWA КНОПКИ ===
+    function hideIosPushButton() {
+        const btn = document.getElementById('ios-push-btn');
+        if (btn) btn.style.display = 'none';
+    }
+
+    function showIosPushButton() {
+        const btn = document.getElementById('ios-push-btn');
+        if (btn) btn.style.display = 'flex';
+    }
+
+    async function checkPushStatusAndUpdateButton() {
+        const userId = localStorage.getItem('nuka_user_id');
+
+        // Если user_id нет, кнопку не показываем (ждем загрузки Kotlin)
+        if (!userId) {
+            hideIosPushButton();
+            // Повторяем попытку через 1 секунду
+            setTimeout(checkPushStatusAndUpdateButton, 1000);
+            return;
+        }
+
+        // Проверяем наличие подписки в базе
+        try {
+            const res = await fetch(`https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions?user_id=eq.${userId}&select=id`, {
+                headers: { 'apikey': ANON_KEY }
+            });
+            const data = await res.json();
+
+            if (data && data.length > 0) {
+                // Подписка есть в базе — уведомления включены, кнопку не показываем
+                hideIosPushButton();
+            } else {
+                // Подписки нет — показываем кнопку
+                showIosPushButton();
+            }
+        } catch (e) {
+            console.error('Ошибка проверки подписки:', e);
+            // Если ошибка сети, скрываем кнопку (чтобы не мигала)
+            hideIosPushButton();
+        }
+    }
+
+    const isIOSPWA = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    const forceShowOnPC = true; // <-- ВРЕМЕННО ДЛЯ ТЕСТА НА ПК
+
+    if (isIOSPWA || forceShowOnPC) {
+        // Запускаем проверку сразу и повторяем каждые 2 секунды
+        checkPushStatusAndUpdateButton();
+        setInterval(checkPushStatusAndUpdateButton, 2000);
+
+        const btn = document.getElementById('ios-push-btn');
+        btn.addEventListener('click', async function() {
+            console.log("iOS PWA: Кнопка нажата");
+            if (typeof window.requestPushPermission === 'function') {
+                await window.requestPushPermission();
+                checkPushStatusAndUpdateButton(); // После нажатия перепроверяем
+            }
+        });
+    }
+</script>
+</body>
+</html>

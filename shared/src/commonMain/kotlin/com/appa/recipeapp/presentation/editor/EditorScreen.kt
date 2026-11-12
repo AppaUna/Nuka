@@ -1,9 +1,13 @@
 package com.appa.recipeapp.presentation.editor
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,19 +27,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +52,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.appa.recipeapp.platform.PlatformBackHandler
 import com.appa.recipeapp.platform.bytesToImageBitmap
 import com.appa.recipeapp.platform.rememberPhotoPicker
 import com.appa.recipeapp.ui.theme.Accent
@@ -64,7 +76,6 @@ import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.bg_texture
 import recipeapp.shared.generated.resources.editor_decor
-import recipeapp.shared.generated.resources.exit_dialog
 
 @Composable
 fun EditorScreen(
@@ -72,20 +83,25 @@ fun EditorScreen(
     onBack: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    val scope = rememberCoroutineScope()
+    val movingStepId by viewModel.movingStepId.collectAsStateWithLifecycle()
 
     val photoPicker = rememberPhotoPicker(
-        onPhotoPicked = { file ->
-            viewModel.onCropStart(file)
-        }
+        onPhotoPicked = { file -> viewModel.onCropStart(file) }
     )
 
     val stepPhotoPicker = rememberPhotoPicker(
-        onPhotoPicked = { file ->
-            viewModel.onCropStart(file, viewModel.getPendingStepId())
-        }
+        onPhotoPicked = { file -> viewModel.onCropStart(file, viewModel.getPendingStepId()) }
     )
+
+    PlatformBackHandler(enabled = state.hasChanges && !state.showExitDialog) {
+        viewModel.onBackPressed()
+    }
+
+    PlatformBackHandler(enabled = state.showExitDialog) {
+        viewModel.cancelExit()
+    }
+
+    val scrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
 
     if (state.isLoading) {
         Box(
@@ -94,15 +110,6 @@ fun EditorScreen(
         ) {
             CircularProgressIndicator(color = Accent)
         }
-        return
-    }
-
-    if (state.isCropping && state.croppingFile != null) {
-        CropScreen(
-            photoFile = state.croppingFile!!,
-            onConfirm = { bytes -> viewModel.onCropConfirm(bytes) },
-            onCancel = { viewModel.onCropCancel() },
-        )
         return
     }
 
@@ -136,11 +143,7 @@ fun EditorScreen(
                 saveStatusText = state.saveStatusText,
                 isSaving = state.isSaving,
                 onBack = {
-                    if (state.hasChanges) {
-                        viewModel.onBackPressed()
-                    } else {
-                        onBack()
-                    }
+                    if (state.hasChanges) viewModel.onBackPressed() else onBack()
                 },
                 onSave = viewModel::save,
             )
@@ -148,9 +151,27 @@ fun EditorScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(bottom = 32.dp),
             ) {
+                if (state.isDraftRestored) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Accent.copy(alpha = 0.15f))
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            text = "Черновик восстановлен",
+                            color = Accent,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
                 PhotoPickerBlock(
                     photoUri = state.photoUri,
                     photoBytes = state.photoBytes,
@@ -204,8 +225,11 @@ fun EditorScreen(
 
                 StepsSection(
                     steps = state.steps,
+                    movingStepId = movingStepId,
                     onAdd = viewModel::addStep,
                     onRemove = viewModel::removeStep,
+                    onMoveUp = viewModel::moveStepUp,
+                    onMoveDown = viewModel::moveStepDown,
                     onTextChange = viewModel::updateStep,
                     onPhotoClick = { stepId ->
                         viewModel.onStepPhotoClicked(stepId)
@@ -235,21 +259,26 @@ fun EditorScreen(
             }
         }
 
+        if (state.isCropping && state.croppingFile != null) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                CropScreen(
+                    photoFile = state.croppingFile!!,
+                    onConfirm = { bytes, cropRecipe -> viewModel.onCropConfirm(bytes, cropRecipe) },
+                    onCancel = { viewModel.onCropCancel() },
+                )
+            }
+        }
+
         if (state.showExitDialog) {
             ExitConfirmDialog(
-                onCancel = { viewModel.dismissExitDialog() },
-                onConfirm = {
-                    viewModel.dismissExitDialog()
-                    onBack()
-                },
+                isNewRecipe = state.recipeId == null,
+                onCancel = { viewModel.cancelExit() },
+                onSaveDraft = { viewModel.saveDraftAndExit(onBack) },
+                onExitWithoutSaving = { viewModel.exitWithoutSaving(onBack) },
             )
         }
     }
 }
-
-// ═══════════════════════════════════════════
-// ШАПКА
-// ═══════════════════════════════════════════
 
 @Composable
 private fun EditorTopBar(
@@ -314,10 +343,6 @@ private fun EditorTopBar(
     }
 }
 
-// ═══════════════════════════════════════════
-// ФОТО (главное)
-// ═══════════════════════════════════════════
-
 @Composable
 private fun PhotoPickerBlock(
     photoUri: String?,
@@ -325,7 +350,6 @@ private fun PhotoPickerBlock(
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    // Байты → ImageBitmap (работает на Android + Web через CMP API)
     val bitmap = remember(photoBytes) {
         photoBytes?.let { bytesToImageBitmap(it) }
     }
@@ -411,10 +435,6 @@ private fun PhotoPickerBlock(
     }
 }
 
-// ═══════════════════════════════════════════
-// УНИВЕРСАЛЬНОЕ ПОЛЕ
-// ═══════════════════════════════════════════
-
 @Composable
 private fun EditorField(
     label: String,
@@ -425,6 +445,8 @@ private fun EditorField(
     minHeight: androidx.compose.ui.unit.Dp = 48.dp,
     isRequired: Boolean = false,
 ) {
+    val maxHeight = if (singleLine) minHeight else 320.dp
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -472,17 +494,13 @@ private fun EditorField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        if (!singleLine) Modifier.height(minHeight)
+                        if (!singleLine) Modifier.heightIn(min = minHeight, max = maxHeight)
                         else Modifier
                     ),
             )
         }
     }
 }
-
-// ═══════════════════════════════════════════
-// ТЕГИ
-// ═══════════════════════════════════════════
 
 @Composable
 private fun TagsSection(
@@ -637,10 +655,6 @@ private fun TagChipEditor(
     }
 }
 
-// ═══════════════════════════════════════════
-// ИНГРЕДИЕНТЫ
-// ═══════════════════════════════════════════
-
 @Composable
 private fun IngredientsSection(
     ingredients: List<IngredientDraft>,
@@ -781,15 +795,14 @@ private fun IngredientRow(
     }
 }
 
-// ═══════════════════════════════════════════
-// ШАГИ ПРИГОТОВЛЕНИЯ
-// ═══════════════════════════════════════════
-
 @Composable
 private fun StepsSection(
     steps: List<StepDraft>,
+    movingStepId: Long?,
     onAdd: () -> Unit,
     onRemove: (Long) -> Unit,
+    onMoveUp: (Long) -> Unit,
+    onMoveDown: (Long) -> Unit,
     onTextChange: (Long, String) -> Unit,
     onPhotoClick: (Long) -> Unit,
     onPhotoRemove: (Long) -> Unit,
@@ -797,7 +810,8 @@ private fun StepsSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp),
+            .padding(top = 16.dp)
+            .animateContentSize(),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -821,6 +835,11 @@ private fun StepsSection(
             StepRow(
                 number = index + 1,
                 step = step,
+                isMoving = step.id == movingStepId,
+                isFirst = index == 0,
+                isLast = index == steps.size - 1,
+                onMoveUp = { onMoveUp(step.id) },
+                onMoveDown = { onMoveDown(step.id) },
                 onTextChange = { text -> onTextChange(step.id, text) },
                 onRemove = { onRemove(step.id) },
                 onPhotoClick = { onPhotoClick(step.id) },
@@ -855,30 +874,70 @@ private fun StepsSection(
 private fun StepRow(
     number: Int,
     step: StepDraft,
+    isMoving: Boolean,
+    isFirst: Boolean,
+    isLast: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onTextChange: (String) -> Unit,
     onRemove: () -> Unit,
     onPhotoClick: () -> Unit,
     onPhotoRemove: () -> Unit,
 ) {
+    val scale by animateFloatAsState(
+        targetValue = if (isMoving) 1.02f else 1f,
+        animationSpec = tween(150)
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isMoving) 0.8f else 1f,
+        animationSpec = tween(150)
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            },
         verticalAlignment = Alignment.Top,
     ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(Accent),
-            contentAlignment = Alignment.Center,
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 2.dp)
         ) {
-            Text(
-                text = "$number",
-                color = Background,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Accent),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$number",
+                    color = Background,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            if (!isFirst) {
+                AnimatedIconButton(
+                    icon = Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Вверх",
+                    onClick = onMoveUp
+                )
+            }
+            if (!isLast) {
+                AnimatedIconButton(
+                    icon = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Вниз",
+                    onClick = onMoveDown
+                )
+            }
         }
 
         Spacer(Modifier.width(10.dp))
@@ -910,7 +969,7 @@ private fun StepRow(
                     cursorBrush = SolidColor(Accent),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(60.dp),
+                        .heightIn(min = 60.dp, max = 240.dp),
                 )
             }
 
@@ -926,16 +985,44 @@ private fun StepRow(
 
         Spacer(Modifier.width(8.dp))
 
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onRemove),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(text = "✕", color = TextSecondary, fontSize = 14.sp)
-        }
+        AnimatedIconButton(
+            icon = Icons.Default.Close,
+            contentDescription = "Удалить",
+            onClick = onRemove,
+            isDanger = true
+        )
     }
+}
+
+@Composable
+private fun AnimatedIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    isDanger: Boolean = false
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val tint = when {
+        isPressed && isDanger -> Error
+        isPressed -> Accent
+        else -> TextSecondary
+    }
+
+    Icon(
+        imageVector = icon,
+        contentDescription = contentDescription,
+        tint = tint,
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+    )
 }
 
 @Composable
@@ -956,8 +1043,8 @@ private fun StepPhotoBlock(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(90.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .height(225.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .clickable(onClick = onClick),
                 ) {
                     when {
@@ -1028,10 +1115,6 @@ private fun StepPhotoBlock(
         }
     }
 }
-
-// ═══════════════════════════════════════════
-// МУЗЫКА
-// ═══════════════════════════════════════════
 
 @Composable
 private fun MusicSection(
@@ -1105,6 +1188,8 @@ private fun MusicField(
     singleLine: Boolean,
     minHeight: androidx.compose.ui.unit.Dp = 48.dp,
 ) {
+    val maxHeight = if (singleLine) minHeight else 220.dp
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1133,7 +1218,7 @@ private fun MusicField(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
-                    if (!singleLine) Modifier.height(minHeight)
+                    if (!singleLine) Modifier.heightIn(min = minHeight, max = maxHeight)
                     else Modifier
                 ),
         )
@@ -1217,20 +1302,20 @@ private fun MusicTrackRow(
     }
 }
 
-// ═══════════════════════════════════════════
-// ДИАЛОГ ОТМЕНЫ
-// ═══════════════════════════════════════════
-
 @Composable
 private fun ExitConfirmDialog(
+    isNewRecipe: Boolean,
     onCancel: () -> Unit,
-    onConfirm: () -> Unit,
+    onSaveDraft: () -> Unit,
+    onExitWithoutSaving: () -> Unit,
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xCC000000))
-            .clickable(onClick = onCancel),
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onCancel() })
+            },
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -1241,28 +1326,6 @@ private fun ExitConfirmDialog(
                 .background(Background)
                 .clickable(enabled = false) { },
         ) {
-            Image(
-                painter = painterResource(Res.drawable.bg_texture),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alpha = 0.15f,
-                modifier = Modifier.matchParentSize(),
-            )
-
-            Image(
-                painter = painterResource(Res.drawable.exit_dialog),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                alpha = 0.15f,
-                colorFilter = ColorFilter.colorMatrix(
-                    ColorMatrix().apply { setToSaturation(0f) }
-                ),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(110.dp)
-                    .offset(x = 10.dp, y = 20.dp),
-            )
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1270,10 +1333,22 @@ private fun ExitConfirmDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = "Выйти без сохранения?",
+                    text = if (isNewRecipe) "Сохранить черновик?" else "Выйти без сохранения?",
                     color = TextPrimary,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = if (isNewRecipe)
+                        "Хочешь продолжить редактирование позже или выйти?"
+                    else
+                        "Все внесенные изменения будут потеряны.",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
                     textAlign = TextAlign.Center,
                 )
 
@@ -1282,64 +1357,51 @@ private fun ExitConfirmDialog(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedDialogButton(
-                        label = "Отмена",
-                        onClick = onCancel,
-                    )
-                    OutlinedDialogButton(
-                        label = "Выйти",
-                        onClick = onConfirm,
-                    )
+                    val inter1 = remember { MutableInteractionSource() }
+                    val pressed1 by inter1.collectIsPressedAsState()
+                    val scale1 by animateFloatAsState(if (pressed1) 0.95f else 1f, tween(100))
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .graphicsLayer(scaleX = scale1, scaleY = scale1)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(0.7.dp, Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .clickable(
+                                interactionSource = inter1,
+                                indication = null,
+                                onClick = onExitWithoutSaving
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Выйти", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    }
+
+                    if (isNewRecipe) {
+                        val inter2 = remember { MutableInteractionSource() }
+                        val pressed2 by inter2.collectIsPressedAsState()
+                        val scale2 by animateFloatAsState(if (pressed2) 0.95f else 1f, tween(100))
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .graphicsLayer(scaleX = scale2, scaleY = scale2)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Accent)
+                                .clickable(
+                                    interactionSource = inter2,
+                                    indication = null,
+                                    onClick = onSaveDraft
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Сохранить", color = Background, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun OutlinedDialogButton(
-    label: String,
-    onClick: () -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    val borderBrush = if (isPressed) {
-        Brush.linearGradient(listOf(Accent, Accent, Accent))
-    } else {
-        Brush.linearGradient(
-            listOf(
-                Color.White.copy(alpha = 0.25f),
-                Color.Gray.copy(alpha = 0.10f),
-                Color.White.copy(alpha = 0.25f),
-            )
-        )
-    }
-
-    val contentColor = if (isPressed) Accent else TextPrimary
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            )
-            .border(
-                width = 0.7.dp,
-                brush = borderBrush,
-                shape = RoundedCornerShape(12.dp),
-            )
-            .padding(horizontal = 24.dp),
-    ) {
-        Text(
-            text = label,
-            color = contentColor,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-        )
     }
 }

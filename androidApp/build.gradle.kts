@@ -5,6 +5,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
+    id("com.google.gms.google-services")
 }
 
 
@@ -34,7 +35,13 @@ dependencies {
     implementation(libs.filekit.dialogs)
 
     implementation(libs.compose.uiToolingPreview)
+    implementation("com.google.firebase:firebase-messaging-ktx:24.1.0")
+
+    implementation("io.ktor:ktor-client-okhttp:3.0.3")
+    implementation("io.ktor:ktor-client-content-negotiation:3.0.3")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.3")
     debugImplementation(libs.compose.uiTooling)
+
 }
 
 android {

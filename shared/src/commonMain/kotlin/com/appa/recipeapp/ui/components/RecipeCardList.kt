@@ -1,5 +1,6 @@
 package com.appa.recipeapp.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +33,7 @@ import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.ic_favorite
 import recipeapp.shared.generated.resources.ic_timer
+import recipeapp.shared.generated.resources.nuka_cap
 
 @Composable
 fun RecipeCardList(
@@ -73,7 +73,6 @@ fun RecipeCardList(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // 📝 НОВОЕ: описание (2 строки)
             if (recipe.description.isNotBlank()) {
                 Spacer(Modifier.height(3.dp))
                 Text(
@@ -87,11 +86,10 @@ fun RecipeCardList(
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Star,
+                Image(
+                    painter = painterResource(Res.drawable.nuka_cap),
                     contentDescription = null,
-                    tint = Accent,
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(14.dp),
                 )
                 Spacer(Modifier.width(3.dp))
                 Text(
@@ -121,7 +119,6 @@ fun RecipeCardList(
                 )
             }
             Spacer(Modifier.height(8.dp))
-            // ⏱ Время с иконкой таймера
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_timer),

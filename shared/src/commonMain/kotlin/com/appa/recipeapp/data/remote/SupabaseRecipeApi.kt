@@ -19,6 +19,7 @@ import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import com.appa.recipeapp.data.remote.dto.ProfileDto
+import com.appa.recipeapp.data.remote.dto.CommentDto
 
 sealed class ApiResult<out T> {
     data class Success<T>(val data: T) : ApiResult<T>()
@@ -42,9 +43,6 @@ private data class GetRecipesByTagRandomRequest(
 
 class SupabaseRecipeApi(private val client: SupabaseClient) {
 
-    /**
-     * Страница рецептов в СЛУЧАЙНОМ порядке (стабильно для одного seed).
-     */
     suspend fun getRecipesPage(seed: Long, limit: Int = 20, offset: Int = 0): ApiResult<List<RecipeDto>> {
         return try {
             val response: HttpResponse = client.http.post(
@@ -75,9 +73,6 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
         }
     }
 
-    /**
-     * Страница рецептов по тегу в СЛУЧАЙНОМ порядке.
-     */
     suspend fun getRecipesByTagPage(
         tag: String,
         seed: Long,
@@ -114,9 +109,6 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
         }
     }
 
-    /**
-     * Weekly — популярное (не случайное, сортировка по popularity).
-     */
     suspend fun getWeeklyRecipes(limit: Int = 6): ApiResult<List<RecipeDto>> {
         return try {
             val response: HttpResponse = client.http.get(
@@ -212,8 +204,6 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
         }
     }
 
-    // ─── Favorites ───
-
     suspend fun getFavoriteRecipeIds(accessToken: String, userId: String): Set<String> {
         return try {
             val response: HttpResponse = client.http.get(
@@ -276,8 +266,6 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
             false
         }
     }
-
-    // ─── Ratings ───
 
     suspend fun getRatingsForRecipe(recipeId: String): List<RatingDto> {
         return try {
@@ -358,10 +346,6 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
         }
     }
 
-    /**
-     * Удалить оценку текущего пользователя у рецепта.
-     * Возвращает true при успехе
-     */
     suspend fun deleteRating(accessToken: String, recipeId: String, userId: String): Boolean {
         return try {
             val response: HttpResponse = client.http.delete(
@@ -375,7 +359,6 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
             }
             val bodyText = try { response.body<String>() } catch (e: Throwable) { "<no body>" }
             println("DEBUG deleteRating: status=${response.status}, body=$bodyText")
-            // 200/204 — успех, 404 — оценки и не было (тоже ок)
             response.status.value in 200..299 || response.status.value == 404
         } catch (e: Throwable) {
             println("DEBUG deleteRating EXCEPTION: ${e::class.simpleName} — ${e.message}")
@@ -410,8 +393,6 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
             null
         }
     }
-
-    // ─── Profiles / Avatars ───
 
     suspend fun getProfiles(): List<ProfileDto> {
         return try {
@@ -454,6 +435,93 @@ class SupabaseRecipeApi(private val client: SupabaseClient) {
             false
         }
     }
+
+    suspend fun getCommentsForRecipe(recipeId: String): List<CommentDto> {
+        return try {
+            val response: HttpResponse = client.http.get(
+                "${SupabaseConfig.BASE_URL}${SupabaseConfig.REST_PATH}/comments",
+            ) {
+                parameter("recipe_id", "eq.$recipeId")
+                parameter("select", "*")
+                parameter("order", "created_at.desc")
+                headers {
+                    client.anonHeaders().forEach { (key, value) -> header(key, value) }
+                }
+            }
+            if (response.status.value in 200..299) {
+                response.body()
+            } else {
+                println("DEBUG getCommentsForRecipe error: ${response.status} — ${response.body<String>()}")
+                emptyList()
+            }
+        } catch (e: Throwable) {
+            println("DEBUG getCommentsForRecipe EXCEPTION: ${e::class.simpleName} — ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun addComment(accessToken: String, recipeId: String, userId: String, text: String): Boolean {
+        return try {
+            val response: HttpResponse = client.http.post(
+                "${SupabaseConfig.BASE_URL}${SupabaseConfig.REST_PATH}/comments",
+            ) {
+                headers {
+                    client.authHeaders(accessToken).forEach { (key, value) -> header(key, value) }
+                    header("Prefer", "return=minimal")
+                }
+                contentType(ContentType.Application.Json)
+                setBody(CommentInsert(recipeId = recipeId, userId = userId, text = text))
+            }
+            if (response.status.value !in 200..299) {
+                println("DEBUG addComment error: ${response.status} — ${response.body<String>()}")
+            }
+            response.status.value in 200..299
+        } catch (e: Throwable) {
+            println("DEBUG addComment EXCEPTION: ${e::class.simpleName} — ${e.message}")
+            false
+        }
+    }
+
+    suspend fun deleteComment(accessToken: String, commentId: String): Boolean {
+        return try {
+            val response: HttpResponse = client.http.delete(
+                "${SupabaseConfig.BASE_URL}${SupabaseConfig.REST_PATH}/comments",
+            ) {
+                parameter("id", "eq.$commentId")
+                headers {
+                    client.authHeaders(accessToken).forEach { (key, value) -> header(key, value) }
+                }
+            }
+            response.status.value in 200..299
+        } catch (e: Throwable) {
+            println("DEBUG deleteComment EXCEPTION: ${e::class.simpleName} — ${e.message}")
+            false
+        }
+    }
+
+    suspend fun saveFcmToken(accessToken: String, userId: String, token: String): Boolean {
+        return try {
+            val response: HttpResponse = client.http.post(
+                "${SupabaseConfig.BASE_URL}${SupabaseConfig.REST_PATH}/push_subscriptions",
+            ) {
+                headers {
+                    client.authHeaders(accessToken).forEach { (key, value) -> header(key, value) }
+                    header("Prefer", "resolution=merge-duplicates")
+                }
+                contentType(ContentType.Application.Json)
+                setBody(mapOf(
+                    "user_id" to userId,
+                    "endpoint" to token,
+                    "p256dh" to "",
+                    "auth" to ""
+                ))
+            }
+            response.status.value in 200..299
+        } catch (e: Throwable) {
+            println("DEBUG saveFcmToken EXCEPTION: ${e.message}")
+            false
+        }
+    }
 }
 
 @Serializable
@@ -483,4 +551,11 @@ private data class RatingInsert(
 @Serializable
 private data class RatingIdRow(
     val id: String,
+)
+
+@Serializable
+private data class CommentInsert(
+    @SerialName("recipe_id") val recipeId: String,
+    @SerialName("user_id") val userId: String,
+    val text: String,
 )

@@ -9,8 +9,8 @@ import com.appa.recipeapp.data.repository.SupabaseRecipeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class DetailViewModel(
@@ -23,69 +23,52 @@ class DetailViewModel(
     val state: StateFlow<DetailState> = _state.asStateFlow()
 
     init {
-        println("DEBUG DetailViewModel: создан #${hashCode()}")
+        viewModelScope.launch {
+            (repository as? SupabaseRecipeRepository)?.refreshAll()
+        }
         loadRecipe()
-        loadRatings()
+        loadRatingsAndComments()
     }
 
     private fun loadRecipe() {
-        repository.getRecipe(recipeId)
-            .onEach { recipe ->
-                if (recipe == null) {
-                    _state.value = _state.value.copy(
-                        recipe = null,
-                        isLoading = false,
-                        errorMessage = "Рецепт не найден",
-                    )
-                    return@onEach
-                }
-
+        viewModelScope.launch {
+            try {
+                val recipe = repository.getRecipe(recipeId).filterNotNull().first()
                 val myId = authRepository.getUserId()
-                val isMine = myId.isNotBlank() && recipe.authorId == myId
-
                 _state.value = _state.value.copy(
                     recipe = recipe,
                     isLoading = false,
                     errorMessage = null,
-                    isMyRecipe = isMine,
+                    isMyRecipe = myId.isNotBlank() && recipe.authorId == myId,
+                    currentUserID = myId,
                 )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(recipe = null, isLoading = false, errorMessage = "Рецепт не найден")
             }
-            .launchIn(viewModelScope)
+        }
     }
 
-    private fun loadRatings() {
+    private fun loadRatingsAndComments() {
         viewModelScope.launch {
             val repo = repository as? SupabaseRecipeRepository ?: return@launch
             val ratings = repo.loadRatingsForRecipe(recipeId)
+            val comments = repo.loadCommentsForRecipe(recipeId)
 
             val myId = authRepository.getUserId()
             val myRating = ratings.find { it.userId == myId }
 
-            val draftStars = if (_state.value.draftStars == 0 && myRating != null) {
-                myRating.stars
-            } else {
-                _state.value.draftStars
-            }
-            val draftComment = if (_state.value.draftComment.isBlank() && myRating != null) {
-                myRating.comment
-            } else {
-                _state.value.draftComment
-            }
+            val draftStars = if (_state.value.draftStars == 0 && myRating != null) myRating.stars else _state.value.draftStars
 
             _state.value = _state.value.copy(
                 ratings = ratings,
+                comments = comments,
                 draftStars = draftStars,
-                draftComment = draftComment,
             )
         }
     }
 
     fun onStarsChange(stars: Int) {
         _state.value = _state.value.copy(draftStars = stars)
-    }
-
-    fun onCommentChange(text: String) {
-        _state.value = _state.value.copy(draftComment = text)
     }
 
     fun submitRating() {
@@ -100,23 +83,48 @@ class DetailViewModel(
                 userId = authRepository.getUserId(),
                 userName = authRepository.getDisplayName(),
                 stars = s.draftStars,
-                comment = s.draftComment.trim(),
+                comment = "",
                 createdAt = 0L,
             )
 
             repository.addOrUpdateRating(recipe.id, rating)
-
-            // Очищаем черновик после успешного сохранения
-            _state.value = _state.value.copy(
-                isSubmitting = false,
-                draftStars = 0,
-                draftComment = "",
-            )
-            refreshRatingsOnly()
+            _state.value = _state.value.copy(isSubmitting = false, draftStars = 0)
+            loadRatingsAndComments()
         }
     }
 
-    /** Удалить свою оценку. */
+    fun onCommentChange(text: String) {
+        _state.value = _state.value.copy(draftComment = text)
+    }
+
+    fun submitComment() {
+        val s = _state.value
+        val recipe = s.recipe ?: return
+        if (s.draftComment.isBlank()) return
+
+        viewModelScope.launch {
+            val repo = repository as? SupabaseRecipeRepository ?: return@launch
+            println("DEBUG VM: Отправка комментария: ${s.draftComment}")
+            _state.value = s.copy(isSubmitting = true)
+            val success = repo.addComment(recipe.id, s.draftComment.trim())
+            println("DEBUG VM: Результат: $success")
+            if (success) {
+                _state.value = _state.value.copy(draftComment = "", isSubmitting = false)
+                loadRatingsAndComments()
+            } else {
+                _state.value = _state.value.copy(isSubmitting = false)
+            }
+        }
+    }
+
+    fun toggleFavorite() {
+        val recipe = _state.value.recipe ?: return
+        _state.value = _state.value.copy(recipe = recipe.copy(isFavorite = !recipe.isFavorite))
+        viewModelScope.launch {
+            repository.toggleFavorite(recipe.id)
+        }
+    }
+
     fun deleteMyRating() {
         val s = _state.value
         val recipe = s.recipe ?: return
@@ -125,35 +133,19 @@ class DetailViewModel(
 
         viewModelScope.launch {
             _state.value = s.copy(isSubmitting = true)
-
-            repository.deleteRating(recipe.id, myId)
-
-            _state.value = _state.value.copy(
-                isSubmitting = false,
-                draftStars = 0,
-                draftComment = "",
-            )
-            refreshRatingsOnly()
+            val repo = repository as? SupabaseRecipeRepository ?: return@launch
+            repo.deleteRating(recipe.id, myId)
+            _state.value = _state.value.copy(draftStars = 0, isSubmitting = false)
+            loadRatingsAndComments()
         }
     }
 
-    private fun refreshRatingsOnly() {
+    fun deleteComment(commentId: String) {
         viewModelScope.launch {
             val repo = repository as? SupabaseRecipeRepository ?: return@launch
-            val ratings = repo.loadRatingsForRecipe(recipeId)
-            _state.value = _state.value.copy(ratings = ratings)
+            if (repo.deleteComment(commentId)) {
+                loadRatingsAndComments()
+            }
         }
-    }
-
-    fun toggleFavorite() {
-        val recipe = _state.value.recipe ?: return
-        viewModelScope.launch {
-            repository.toggleFavorite(recipe.id)
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        println("DEBUG DetailViewModel: очищен #${hashCode()}")
     }
 }

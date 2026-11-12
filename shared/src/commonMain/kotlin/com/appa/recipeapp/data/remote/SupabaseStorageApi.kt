@@ -33,7 +33,6 @@ class SupabaseStorageApi(private val client: SupabaseClient) {
         contentType: String,
     ): String? {
         return try {
-            // Загрузка — через внутренний BASE_URL (с токеном, через API)
             val response: HttpResponse = client.http.post(
                 "${SupabaseConfig.BASE_URL}${SupabaseConfig.STORAGE_PATH}/object/$bucket/$fileName",
             ) {
@@ -47,7 +46,6 @@ class SupabaseStorageApi(private val client: SupabaseClient) {
             }
 
             if (response.status.isSuccess()) {
-                // Публичный URL — ВСЕГДА через DuckDNS (работает и на Android, и на PWA)
                 "${SupabaseConfig.PUBLIC_STORAGE_BASE_URL}/object/public/$bucket/$fileName"
             } else {
                 val errorText = try {

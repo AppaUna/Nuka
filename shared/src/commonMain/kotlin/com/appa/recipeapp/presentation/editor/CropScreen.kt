@@ -13,8 +13,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import com.appa.recipeapp.platform.bytesToImageBitmap
 import com.appa.recipeapp.platform.imageBitmapToJpegBytes
-import com.appa.recipeapp.platform.loadImageBitmap
+import com.appa.recipeapp.platform.imageBitmapToWebpBytes
+import com.appa.recipeapp.platform.resizeImageBitmap
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
 import com.attafitamim.krop.core.crop.AspectRatio
@@ -30,77 +32,58 @@ import io.github.vinceglb.filekit.readBytes
 @Composable
 fun CropScreen(
     photoFile: PlatformFile,
-    onConfirm: (ByteArray) -> Unit,
+    onConfirm: (ByteArray, String?) -> Unit,
     onCancel: () -> Unit,
     aspectRatio: Pair<Int, Int> = 4 to 5,
 ) {
     val imageCropper = rememberImageCropper()
     var sourceBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    // Исходные байты — нужны для fallback (если кроп отработал, но не удалось закодировать в JPEG)
     var originalBytes by remember { mutableStateOf<ByteArray?>(null) }
 
-    // Загружаем изображение
     LaunchedEffect(photoFile) {
-        println("DEBUG CropScreen: старт обработки фото")
-
-        // Читаем байты сразу — пригодятся и для загрузки, и для fallback
         val bytes = try {
             photoFile.readBytes().also { originalBytes = it }
         } catch (e: Throwable) {
-            println("DEBUG CropScreen readBytes EXCEPTION: ${e::class.simpleName} — ${e.message}")
             e.printStackTrace()
             onCancel()
             return@LaunchedEffect
         }
 
-        val bitmap = loadImageBitmap(photoFile)
-        println("DEBUG CropScreen: loadImageBitmap вернул ${if (bitmap == null) "null" else "bitmap"}")
-
+        val bitmap = bytesToImageBitmap(bytes)
         if (bitmap == null) {
-            // Web: loadImageBitmap — заглушка (Krop не работает).
-            // Читаем байты напрямую — фото сохранится БЕЗ обрезки 4:5.
-            println("DEBUG CropScreen: bitmap null → передаём ${bytes.size} байт без кропа")
-            onConfirm(bytes)
+            onConfirm(bytes, null)
             return@LaunchedEffect
         }
         sourceBitmap = bitmap
     }
 
-    // Когда изображение загружено — запускаем кроп
     LaunchedEffect(sourceBitmap) {
         val bmp = sourceBitmap ?: return@LaunchedEffect
-        println("DEBUG CropScreen: запускаем Krop")
         val result = imageCropper.crop(bmp)
         when (result) {
             is CropResult.Success -> {
-                val bytes = imageBitmapToJpegBytes(result.bitmap)
-                if (bytes != null) {
-                    println("DEBUG CropScreen: кроп готов, ${bytes.size} байт → onConfirm")
-                    onConfirm(bytes)
+                val resizedBitmap = resizeImageBitmap(result.bitmap, 1920)
+                val webpBytes = imageBitmapToWebpBytes(resizedBitmap, 80)
+                val finalBytes = webpBytes ?: imageBitmapToJpegBytes(resizedBitmap)
+
+                // --- ЛОГИ ---
+                println("NUKA_DEBUG: Оригинал весил ${originalBytes?.size ?: 0} байт")
+                println("NUKA_DEBUG: После WebP (90%) весит ${webpBytes?.size ?: 0} байт")
+                println("NUKA_DEBUG: Итоговый размер (JPEG fallback) ${finalBytes?.size ?: 0} байт")
+                // -----------
+
+                if (finalBytes != null) {
+                    onConfirm(finalBytes, null)
                 } else {
-                    // Fallback: не удалось закодировать в JPEG — отдаём исходные байты
                     val fallback = originalBytes
-                    if (fallback != null) {
-                        println("DEBUG CropScreen: fallback — передаём исходные ${fallback.size} байт")
-                        onConfirm(fallback)
-                    } else {
-                        println("DEBUG CropScreen: fallback невозможен — отмена")
-                        onCancel()
-                    }
+                    if (fallback != null) onConfirm(fallback, null) else onCancel()
                 }
             }
-            CropResult.Cancelled -> {
-                println("DEBUG CropScreen: пользователь отменил кроп")
-                onCancel()
-            }
-            CropError.LoadingError, CropError.SavingError -> {
-                println("DEBUG CropScreen: ошибка $result")
-                onCancel()
-            }
+            CropResult.Cancelled -> onCancel()
+            CropError.LoadingError, CropError.SavingError -> onCancel()
         }
     }
 
-    // Показываем диалог кропа, если он активен
     imageCropper.cropState?.let { cropState ->
         ImageCropperDialog(
             state = cropState,
@@ -110,11 +93,12 @@ fun CropScreen(
         )
     }
 
-    // Пока грузится — показываем спиннер
-    Box(
-        modifier = Modifier.fillMaxSize().background(Background),
-        contentAlignment = Alignment.Center,
-    ) {
-        CircularProgressIndicator(color = Accent)
+    if (sourceBitmap == null) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Background),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = Accent)
+        }
     }
 }

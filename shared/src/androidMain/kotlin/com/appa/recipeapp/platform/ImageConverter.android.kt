@@ -8,38 +8,45 @@ import androidx.compose.ui.graphics.asImageBitmap
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.readBytes
 import java.io.ByteArrayOutputStream
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
-actual suspend fun loadImageBitmap(file: PlatformFile): ImageBitmap? = withContext(Dispatchers.IO) {
-    try {
+actual suspend fun loadImageBitmap(file: PlatformFile): ImageBitmap? {
+    return try {
         val bytes = file.readBytes()
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@withContext null
-        bitmap.asImageBitmap()
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
     } catch (e: Throwable) {
-        println("DEBUG loadImageBitmap error: ${e.message}")
         null
     }
 }
 
 actual fun imageBitmapToJpegBytes(image: ImageBitmap): ByteArray? {
     return try {
-        val bitmap = image.asAndroidBitmap()
-        val out = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-        out.toByteArray()
+        val stream = ByteArrayOutputStream()
+        image.asAndroidBitmap().compress(Bitmap.CompressFormat.JPEG, 90, stream)
+        stream.toByteArray()
     } catch (e: Throwable) {
-        println("DEBUG imageBitmapToJpegBytes error: ${e.message}")
+        null
+    }
+}
+
+actual fun imageBitmapToWebpBytes(image: ImageBitmap, quality: Int): ByteArray? {
+    return try {
+        val stream = ByteArrayOutputStream()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            image.asAndroidBitmap().compress(Bitmap.CompressFormat.WEBP_LOSSY, quality, stream)
+        } else {
+            @Suppress("DEPRECATION")
+            image.asAndroidBitmap().compress(Bitmap.CompressFormat.WEBP, quality, stream)
+        }
+        stream.toByteArray()
+    } catch (e: Throwable) {
         null
     }
 }
 
 actual fun bytesToImageBitmap(bytes: ByteArray): ImageBitmap? {
     return try {
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        bitmap?.asImageBitmap()
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
     } catch (e: Throwable) {
-        println("DEBUG bytesToImageBitmap error: ${e.message}")
         null
     }
 }

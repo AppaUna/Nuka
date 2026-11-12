@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Nuka</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Nuka">
+    <meta name="theme-color" content="#1a1a1a">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+        #compose-root { width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+<div id="compose-root"></div>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/js/sw.js', { scope: '/js/' })
+                .then((reg) => { console.log('JS SW registered:', reg.scope); reg.update(); })
+                .catch((err) => console.error('JS SW error:', err));
+        });
+    }
+</script>
+
+<script>
+    const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNTU2NTk3LCJleHAiOjIxMDY5MTY1OTd9.7uo_yuo7gtD0UqStd4TKbjee1lhHkz_lCSLmBRCTgyI';
+
+    window.requestPushPermission = async function() {
+        console.log('DEBUG JS: requestPushPermission ВЫЗВАНА из Compose!');
+        if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+            console.log('Push: Устройство не поддерживает уведомления');
+            return;
+        }
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') { console.log('Push: Разрешение не получено'); return; }
+
+            const registration = await navigator.serviceWorker.ready;
+            const response = await fetch('/push-api/vapid-public-key');
+            const vapidPublicKey = await response.text();
+
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+            });
+
+            const userId = localStorage.getItem('nuka_user_id');
+            if (!userId) { console.warn('Push: Нет user_id'); return; }
+
+            const subJson = subscription.toJSON();
+
+            await fetch(`https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions?user_id=eq.${userId}`, {
+                method: 'DELETE',
+                headers: { 'apikey': ANON_KEY }
+            });
+
+            const res = await fetch('https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions', {
+                method: 'POST',
+                headers: { 'apikey': ANON_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+                body: JSON.stringify({ user_id: userId, endpoint: subJson.endpoint, p256dh: subJson.keys.p256dh, auth: subJson.keys.auth })
+            });
+
+            if (!res.ok) { const errorText = await res.text(); console.error('Push: Ошибка сохранения:', errorText); return; }
+            localStorage.setItem('push_enabled', 'true');
+            console.log('Push: Подписка успешно сохранена!');
+        } catch (e) { console.error('Push: Ошибка подписки', e); }
+    };
+
+    window.disablePushPermission = async function() {
+        console.log('DEBUG JS: disablePushPermission ВЫЗВАНА из Compose!');
+        try {
+            const userId = localStorage.getItem('nuka_user_id');
+            if (!userId) { console.warn('Push: Нет user_id'); return; }
+            await fetch(`https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions?user_id=eq.${userId}`, { method: 'DELETE', headers: { 'apikey': ANON_KEY } });
+            const registration = await navigator.serviceWorker.ready;
+            const subscription = await registration.pushManager.getSubscription();
+            if (subscription) { await subscription.unsubscribe(); }
+            localStorage.setItem('push_enabled', 'false');
+            console.log('Push: Уведомления выключены!');
+        } catch (e) { console.error('Push: Ошибка отключения', e); }
+    };
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+        return outputArray;
+    }
+</script>
+
+<script src="shared.js"></script>
+</body>
+</html>

@@ -1,20 +1,27 @@
 package com.appa.recipeapp.presentation.editor
 
 import io.github.vinceglb.filekit.PlatformFile
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class IngredientDraft(
     val id: Long,
     val name: String = "",
     val quantity: String = "",
 )
 
+@Serializable
 data class StepDraft(
     val id: Long,
     val text: String = "",
+    val photoUri: String? = null,
+    val photoCropRecipe: String? = null,
+    @kotlinx.serialization.Transient
     val photoBytes: ByteArray? = null,
-    val photoUri: String? = null,  // для отображения существующих фото из БД
+    val photoBase64: String? = null, // <--- УБРАЛИ @Transient
 )
 
+@Serializable
 data class MusicTrackDraft(
     val id: Long,
     val title: String = "",
@@ -22,30 +29,33 @@ data class MusicTrackDraft(
     val thumbnailUrl: String = "",
 )
 
-/** Обязательные теги — должен быть выбран хотя бы один. */
 val REQUIRED_TAGS = listOf("завтрак", "обед", "ужин")
 
-/** Популярные теги для быстрого выбора (не обязательные). */
 val POPULAR_TAGS = listOf(
     "суп", "салат", "десерт", "выпечка", "напитки", "закуска",
     "горячее", "быстро", "праздничное", "русская кухня",
     "итальянская кухня", "азиатская кухня",
 )
 
-/** Этапы сохранения — для индикации в UI. */
 enum class SaveStatus {
-    IDLE,           // ничего не сохраняется
-    UPLOADING_PHOTO, // грузим фото
-    SAVING_RECIPE,  // сохраняем рецепт
+    IDLE, UPLOADING_PHOTO, SAVING_RECIPE,
 }
 
+@Serializable
 data class EditorState(
     val recipeId: String? = null,
-    val photoUri: String? = null,       // URL существующего фото (из БД) для отображения
-    val photoBytes: ByteArray? = null,  // байты НОВОГО выбранного фото
+    val photoUri: String? = null,
+    val photoCropRecipe: String? = null,
 
+    @kotlinx.serialization.Transient
+    val photoBytes: ByteArray? = null,
+    val photoBase64: String? = null,
+
+    @kotlinx.serialization.Transient
     val isCropping: Boolean = false,
+    @kotlinx.serialization.Transient
     val croppingFile: PlatformFile? = null,
+    @kotlinx.serialization.Transient
     val croppingForStepId: Long? = null,
 
     val title: String = "",
@@ -64,11 +74,18 @@ data class EditorState(
 
     val notes: String = "",
 
+    @kotlinx.serialization.Transient
     val showExitDialog: Boolean = false,
+    @kotlinx.serialization.Transient
     val isLoading: Boolean = false,
+    @kotlinx.serialization.Transient
     val isSaving: Boolean = false,
+    @kotlinx.serialization.Transient
     val saveStatus: SaveStatus = SaveStatus.IDLE,
+    @kotlinx.serialization.Transient
     val savedRecipeId: String? = null,
+    @kotlinx.serialization.Transient
+    val isDraftRestored: Boolean = false,
 ) {
     val screenTitle: String
         get() = if (recipeId == null) "Новый рецепт" else "Редактирование"
@@ -94,7 +111,8 @@ data class EditorState(
                 musicTracks.any { it.url.isNotBlank() } ||
                 notes.isNotBlank() ||
                 photoBytes != null ||
-                photoUri != null
+                photoUri != null ||
+                photoBase64 != null
 
     val saveStatusText: String
         get() = when (saveStatus) {

@@ -26,6 +26,7 @@ data class Rating(
     val stars: Int = 0,
     val comment: String = "",
     val createdAt: Long = 0L,
+    val userAvatarUrl: String? = null,
 )
 
 @Immutable

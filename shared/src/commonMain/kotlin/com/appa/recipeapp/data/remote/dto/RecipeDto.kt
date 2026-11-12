@@ -115,20 +115,6 @@ data class ProfileDto(
 
 private val dtoJson = Json { ignoreUnknownKeys = true }
 
-/** Размер превью для карточек — 512px достаточно на любом экране. */
-private const val PREVIEW_SIZE = 512
-
-/**
- * Преобразует оригинальный URL фото в URL Supabase Storage Transform.
- */
-private fun transformPhotoUrl(originalUrl: String): String {
-    val marker = "/storage/v1/object/public/"
-    if (!originalUrl.contains(marker)) return originalUrl
-
-    val renderUrl = originalUrl.replace(marker, "/storage/v1/render/image/public/")
-    return "$renderUrl?width=$PREVIEW_SIZE&height=$PREVIEW_SIZE&resize=cover&quality=80"
-}
-
 fun RecipeDto.toDomain(
     favoriteIds: Set<String> = emptySet(),
     avatarOverride: String? = null,
@@ -142,9 +128,7 @@ fun RecipeDto.toDomain(
     ingredients = parseIngredients(ingredients),
     steps = parseSteps(steps),
     tags = tags,
-    photoUrls = listOfNotNull(
-        photoUrl?.takeIf { it.isNotBlank() }?.let(::transformPhotoUrl)
-    ),
+    photoUrls = listOfNotNull(photoUrl?.takeIf { it.isNotBlank() }),
     ratings = emptyList(),
     cookingTimeMinutes = cookingTimeMinutes,
     createdAt = 0L,

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.ic_add
@@ -34,19 +35,26 @@ fun AppBottomBar(
     onNavigate: (Routes) -> Unit,
     onCreateClick: () -> Unit,
 ) {
+    val bg = MaterialTheme.colorScheme.background
+
+    // Плавный градиент: убираем резкую полосу (6 стопов)
+    val gradient = Brush.verticalGradient(
+        colors = listOf(
+            bg.copy(alpha = 0.0f),
+            bg.copy(alpha = 0.15f),
+            bg.copy(alpha = 0.35f),
+            bg.copy(alpha = 0.55f),
+            bg.copy(alpha = 0.75f),
+            bg.copy(alpha = 0.9f),
+            bg.copy(alpha = 1.0f),
+        ),
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background.copy(alpha = 0f),
-                        MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
-                        MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
-                    ),
-                )
-            )
-            .padding(top = 10.dp, bottom = 24.dp),
+            .background(gradient)
+            .padding(top = 40.dp, bottom = 24.dp), // Возвращаем отступы как было
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -90,7 +98,7 @@ private fun BarItem(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    iconRes: org.jetbrains.compose.resources.DrawableResource,
+    iconRes: DrawableResource,
     forceAccent: Boolean = false,
 ) {
     val iconColor = if (forceAccent || selected)

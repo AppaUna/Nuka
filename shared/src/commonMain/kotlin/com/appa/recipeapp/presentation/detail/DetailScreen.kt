@@ -2,6 +2,7 @@ package com.appa.recipeapp.presentation.detail
 
 import coil3.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,7 +28,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
 import com.appa.recipeapp.platform.openExternalUrl
 import androidx.compose.ui.text.TextStyle
@@ -49,11 +51,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.appa.recipeapp.data.model.Rating
 import com.appa.recipeapp.data.model.Recipe
 import com.appa.recipeapp.ui.components.PlaceholderImage
-import com.appa.recipeapp.ui.components.RecipeImage
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
 import com.appa.recipeapp.ui.theme.DividerColor
-import com.appa.recipeapp.ui.theme.Error
 import com.appa.recipeapp.ui.theme.Surface
 import com.appa.recipeapp.ui.theme.SurfaceVariant
 import com.appa.recipeapp.ui.theme.TextPrimary
@@ -64,28 +64,14 @@ import com.appa.recipeapp.ui.components.SkeletonDetailContent
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.ic_timer
+import recipeapp.shared.generated.resources.nuka_cap
 import com.appa.recipeapp.ui.components.AuthorAvatar
-
-/**
- * URL фото для DETAIL-экрана — оригинал, без transform.
- *
- * Логика: RecipeDto уже применил transform (512px) для превью в карточках.
- * Для Detail нам нужен оригинал. Обратно к оригиналу можно вернуться,
- * если убрать render-параметры.
- *
- * Работает только для Supabase Storage URL. Для остальных — возвращает как есть.
- */
-private fun detailPhotoUrl(url: String?): String? {
-    if (url.isNullOrBlank()) return url
-
-    // Если URL уже render-вариант — убираем query-параметры,
-    // но НЕ возвращаемся к object-URL, потому что storage отдаёт оригинал
-    // и по render-URL без параметров. Это одна из особенностей Supabase Storage.
-    // Однако проще всего — вернуть URL как есть, но БЕЗ query, что даст оригинал.
-    val queryIndex = url.indexOf('?')
-    return if (queryIndex > 0) url.substring(0, queryIndex) else url
-}
-
+import com.appa.recipeapp.data.model.Comment
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.pointerInput
+import com.appa.recipeapp.ui.theme.Error
+import androidx.compose.material.icons.filled.Close
 @Composable
 fun DetailScreen(
     viewModel: DetailViewModel,
@@ -143,7 +129,6 @@ fun DetailScreen(
                     }
                 }
 
-                // ⚠️ Заметки — ПОД музыкой (перенесено)
                 item {
                     if (recipe.musicNote.isNotBlank() || recipe.musicTracks.isNotEmpty()) {
                         SectionBlock(title = "Музыка для готовки") {
@@ -168,15 +153,26 @@ fun DetailScreen(
                 }
 
                 item {
-                    SectionBlock(title = "Критика", showDivider = false) {
-                        ReviewsBlock(
+                    SectionBlock(title = "Оценки", showDivider = true) {
+                        RatingsBlock(
                             ratings = state.ratings,
                             draftStars = state.draftStars,
-                            draftComment = state.draftComment,
                             onStarsChange = viewModel::onStarsChange,
-                            onCommentChange = viewModel::onCommentChange,
                             onSubmit = viewModel::submitRating,
-                            onDelete = viewModel::deleteMyRating,
+                            onDeleteMyRating = viewModel::deleteMyRating,
+                        )
+                    }
+                }
+
+                item {
+                    SectionBlock(title = "Комментарии", showDivider = false) {
+                        CommentsBlock(
+                            comments = state.comments,
+                            draftComment = state.draftComment,
+                            onCommentChange = viewModel::onCommentChange,
+                            onSubmit = viewModel::submitComment,
+                            currentUserId = state.currentUserID,
+                            onDeleteComment = viewModel::deleteComment,
                         )
                     }
                 }
@@ -184,10 +180,6 @@ fun DetailScreen(
         }
     }
 }
-
-// ═══════════════════════════════════════════
-// ВЕРХНИЙ БЛОК
-// ═══════════════════════════════════════════
 
 @Composable
 private fun TopPhotoBlock(
@@ -202,7 +194,7 @@ private fun TopPhotoBlock(
             .fillMaxWidth()
             .height(450.dp),
     ) {
-        val detailPhoto = detailPhotoUrl(recipe.photoUrls.firstOrNull())
+        val detailPhoto = recipe.photoUrls.firstOrNull()
         if (!detailPhoto.isNullOrBlank()) {
             AsyncImage(
                 model = detailPhoto,
@@ -260,10 +252,6 @@ private fun TopPhotoBlock(
     }
 }
 
-// ═══════════════════════════════════════════
-// КАРТОЧКА С НАЗВАНИЕМ
-// ═══════════════════════════════════════════
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TitleCard(recipe: Recipe) {
@@ -285,12 +273,10 @@ private fun TitleCard(recipe: Recipe) {
         Spacer(Modifier.height(12.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Звёздочка + рейтинг
-            Icon(
-                imageVector = Icons.Default.Star,
+            Image(
+                painter = painterResource(Res.drawable.nuka_cap),
                 contentDescription = null,
-                tint = Accent,
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.size(16.dp)
             )
             Spacer(Modifier.width(4.dp))
             Text(
@@ -302,7 +288,6 @@ private fun TitleCard(recipe: Recipe) {
 
             MetricDivider()
 
-            // Аватарка + имя автора (НОВОЕ)
             AuthorAvatar(
                 avatarUrl = recipe.authorAvatarUrl,
                 size = 16.dp,
@@ -316,7 +301,6 @@ private fun TitleCard(recipe: Recipe) {
 
             MetricDivider()
 
-            // Время
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_timer),
@@ -369,10 +353,6 @@ private fun TitleCard(recipe: Recipe) {
     }
 }
 
-// ═══════════════════════════════════════════
-// СЕКЦИЯ
-// ═══════════════════════════════════════════
-
 @Composable
 private fun SectionBlock(
     title: String,
@@ -404,8 +384,6 @@ private fun SectionBlock(
         }
     }
 }
-
-// ─── Ингредиенты ───
 
 @Composable
 private fun IngredientsList(recipe: Recipe) {
@@ -450,8 +428,6 @@ private fun IngredientsList(recipe: Recipe) {
     }
 }
 
-// ─── Шаги ───
-
 @Composable
 private fun StepsList(recipe: Recipe) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -486,10 +462,8 @@ private fun StepsList(recipe: Recipe) {
                                     .height(225.dp)
                                     .clip(RoundedCornerShape(12.dp)),
                             ) {
-                                // Для шагов тоже запрашиваем оригинал,
-                                // потому что шаг — это большое фото на весь экран.
                                 AsyncImage(
-                                    model = detailPhotoUrl(step.photoUrl),
+                                    model = step.photoUrl,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize(),
@@ -522,11 +496,8 @@ private fun StepsList(recipe: Recipe) {
     }
 }
 
-// ─── Музыка ───
-
 @Composable
 private fun MusicBlock(recipe: Recipe) {
-
     Column {
         if (recipe.musicNote.isNotBlank()) {
             Text(
@@ -595,165 +566,93 @@ private fun MusicBlock(recipe: Recipe) {
     }
 }
 
-// ─── Критика ───
-
 @Composable
-private fun ReviewsBlock(
+private fun RatingsBlock(
     ratings: List<Rating>,
     draftStars: Int,
-    draftComment: String,
     onStarsChange: (Int) -> Unit,
-    onCommentChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    onDelete: () -> Unit,
+    onDeleteMyRating: () -> Unit,
 ) {
     Column {
-        Text(
-            text = "Твоя оценка",
-            color = TextSecondary,
-            fontSize = 13.sp,
-        )
-        Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             repeat(5) { index ->
                 val starIndex = index + 1
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = if (starIndex <= draftStars) Accent
-                    else TextSecondary.copy(alpha = 0.4f),
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable {
-                            onStarsChange(starIndex)
-                        },
-                )
-            }
-        }
+                val isSelected = starIndex <= draftStars
 
-        Spacer(Modifier.height(16.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
-                .padding(14.dp),
-        ) {
-            if (draftComment.isEmpty()) {
-                Text(
-                    text = "Оставь свой комментарий...",
-                    color = TextSecondary.copy(alpha = 0.6f),
-                    fontSize = 14.sp,
-                )
-            }
-            BasicTextField(
-                value = draftComment,
-                onValueChange = onCommentChange,
-                textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
-                cursorBrush = SolidColor(Accent),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        val canSubmit = draftStars > 0
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (draftStars > 0) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(enabled = canSubmit) { onDelete() }
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .size(36.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { onStarsChange(starIndex) })
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Удалить отзыв",
-                        color = Error,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                    Image(
+                        painter = painterResource(Res.drawable.nuka_cap),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        colorFilter = if (isSelected) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
                     )
                 }
-                Spacer(Modifier.width(8.dp))
             }
+        }
 
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (canSubmit) Accent else SurfaceVariant)
-                    .clickable(enabled = canSubmit) { onSubmit() }
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-            ) {
-                Text(
-                    text = "Сохранить",
-                    color = if (canSubmit) Background else TextSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+        if (draftStars > 0) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Accent.copy(alpha = 0.2f))
+                        .clickable { onSubmit() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text("Оценить", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onDeleteMyRating() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text("Удалить", color = Error, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
             }
         }
 
         Spacer(Modifier.height(24.dp))
 
-        Text(
-            text = "Отзывы",
-            color = TextPrimary,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(12.dp))
-
         if (ratings.isEmpty()) {
-            Text(
-                text = "Пока никто не оценил",
-                color = TextSecondary,
-                fontSize = 13.sp,
-            )
+            Text("Пока никто не оценил", color = TextSecondary, fontSize = 14.sp)
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 ratings.forEach { rating ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceVariant),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = TextSecondary,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = rating.userName.ifBlank { "Гость" },
-                                    color = TextPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = "★".repeat(rating.stars),
-                                    color = Accent,
-                                    fontSize = 11.sp,
-                                )
-                            }
-                            if (rating.comment.isNotBlank()) {
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = rating.comment,
-                                    color = TextSecondary,
-                                    fontSize = 12.sp,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        AuthorAvatar(avatarUrl = rating.userAvatarUrl, size = 48.dp)
+
+                        Spacer(Modifier.width(12.dp))
+
+                        Text(
+                            text = rating.userName,
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            repeat(rating.stars) {
+                                Image(
+                                    painter = painterResource(Res.drawable.nuka_cap),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -764,9 +663,94 @@ private fun ReviewsBlock(
     }
 }
 
-// ═══════════════════════════════════════════
-// ВСПОМОГАТЕЛЬНЫЕ
-// ═══════════════════════════════════════════
+@Composable
+private fun CommentsBlock(
+    comments: List<Comment>,
+    draftComment: String,
+    onCommentChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    currentUserId: String,
+    onDeleteComment: (String) -> Unit,
+) {
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+                .padding(14.dp),
+        ) {
+            if (draftComment.isEmpty()) {
+                Text("Оставь свой комментарий...", color = TextSecondary.copy(alpha = 0.6f), fontSize = 14.sp)
+            }
+            BasicTextField(
+                value = draftComment,
+                onValueChange = onCommentChange,
+                textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
+                cursorBrush = SolidColor(Accent),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.End)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (draftComment.isNotBlank()) Accent else SurfaceVariant)
+                .clickable(enabled = draftComment.isNotBlank()) { onSubmit() }
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+        ) {
+            Text(
+                text = "Отправить",
+                color = if (draftComment.isNotBlank()) Background else TextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        if (comments.isEmpty()) {
+            Text("Пока нет комментариев", color = TextSecondary, fontSize = 14.sp)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                comments.forEach { comment ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AuthorAvatar(avatarUrl = comment.userAvatarUrl, size = 40.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(comment.userName.ifBlank { "Гость" }, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(4.dp))
+                            Text(comment.text, color = TextSecondary, fontSize = 14.sp, lineHeight = 20.sp)
+                        }
+
+                        if (comment.userId == currentUserId) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onDeleteComment(comment.id) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Удалить",
+                                    tint = Error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun CircleButton(

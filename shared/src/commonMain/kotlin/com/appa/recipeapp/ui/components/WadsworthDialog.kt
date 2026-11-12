@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,7 +48,6 @@ import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.share_tech_mono
 import recipeapp.shared.generated.resources.wadsworth
 
-// Приглушённые цвета — атмосфера пустоши
 private val FalloutGreen = Color(0xFF00C853)
 private val FalloutGreenDim = Color(0xFF4CAF50)
 private val FalloutGrey = Color(0xFF6B6B6B)
@@ -64,33 +64,39 @@ fun WadsworthDialog(
     val audioPlayer = remember { AudioPlayer() }
     val scope = rememberCoroutineScope()
 
+    // Заранее загружаем байты, чтобы в onClick вызвать play() синхронно
+    var audioBytes by remember { mutableStateOf<ByteArray?>(null) }
+
+    LaunchedEffect(jokeAudioFile) {
+        try {
+            val bytes = Res.readBytes("files/jokes/$jokeAudioFile")
+            audioBytes = bytes
+            println("DEBUG Wadsworth: байты загружены (${bytes.size})")
+        } catch (e: Exception) {
+            println("DEBUG Wadsworth: ошибка загрузки байтов — ${e.message}")
+        }
+    }
+
     var showJoke by remember { mutableStateOf(false) }
     var jokeSeenInCurrentSlot by remember {
         mutableStateOf(settings.getIntOrNull("joke_seen_slot") == currentSlot)
     }
 
-    // Общая функция для воспроизведения — используется в обоих случаях
+    // Синхронный вызов play() прямо в обработчике клика (без scope.launch)
     val playJokeAudio: () -> Unit = {
-        scope.launch {
-            try {
-                println("DEBUG playJokeAudio: старт, файл=$jokeAudioFile")
-                val bytes = Res.readBytes("files/jokes/$jokeAudioFile")
-                println("DEBUG playJokeAudio: прочитано ${bytes.size} байт")
-                audioPlayer.play(bytes)
-                println("DEBUG playJokeAudio: play вызван")
-            } catch (e: Exception) {
-                println("DEBUG playJokeAudio EXCEPTION: ${e::class.simpleName} — ${e.message}")
-                e.printStackTrace()
-            }
+        val bytes = audioBytes
+        if (bytes != null) {
+            println("DEBUG playJokeAudio: play() синхронно (${bytes.size} байт)")
+            audioPlayer.play(bytes)
+        } else {
+            println("DEBUG playJokeAudio: байты ещё не загружены")
         }
     }
 
-    // Останавливаем звук при закрытии окна
     DisposableEffect(Unit) {
         onDispose { audioPlayer.release() }
     }
 
-    // Затемнение фона
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -98,7 +104,6 @@ fun WadsworthDialog(
             .clickable(onClick = onClose),
         contentAlignment = Alignment.Center,
     ) {
-        // Окно терминала
         Box(
             modifier = Modifier
                 .padding(horizontal = 20.dp)
@@ -112,7 +117,6 @@ fun WadsworthDialog(
                 )
                 .clickable(enabled = false) { },
         ) {
-            // Тонкие сканлайны (эффект CRT)
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -131,7 +135,6 @@ fun WadsworthDialog(
                     .fillMaxWidth()
                     .padding(20.dp),
             ) {
-                // Шапка терминала
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -176,7 +179,6 @@ fun WadsworthDialog(
                 )
                 Spacer(Modifier.height(16.dp))
 
-                // PNG Уодсворта + подпись справа
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
@@ -200,7 +202,6 @@ fun WadsworthDialog(
                 Spacer(Modifier.height(20.dp))
 
                 if (!showJoke) {
-                    // Варианты ответов
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -217,7 +218,6 @@ fun WadsworthDialog(
                         )
 
                         if (!jokeSeenInCurrentSlot) {
-                            // Первый раз — зелёная кнопка
                             DialogueOption(
                                 text = "Tell me a joke.",
                                 color = FalloutGreen,
@@ -229,7 +229,6 @@ fun WadsworthDialog(
                                 },
                             )
                         } else {
-                            // Уже смотрел — серая, но звук всё равно играет
                             DialogueOption(
                                 text = "Tell me a joke.",
                                 color = FalloutGrey,
@@ -241,7 +240,6 @@ fun WadsworthDialog(
                         }
                     }
                 } else {
-                    // Текст анекдота
                     Column(modifier = Modifier.fillMaxWidth()) {
                         TerminalText(
                             text = "> $jokeText",

@@ -1,3 +1,3 @@
 package com.appa.recipeapp.platform
 
-actual fun getSupabaseBaseUrl(): String = "https://77.51.179.215:8444"
+actual fun getSupabaseBaseUrl(): String = "https://nukaapp.duckdns.org:8446"

@@ -16,4 +16,5 @@ data class ProfileState(
     val isEditingName: Boolean = false,
     val nameDraft: String = "",
     val isLoading: Boolean = true,
+    val recipeIdToDelete: String? = null,
 )

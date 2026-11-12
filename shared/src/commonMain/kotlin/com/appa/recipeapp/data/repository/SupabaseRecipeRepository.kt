@@ -1,5 +1,6 @@
 package com.appa.recipeapp.data.repository
 
+import com.appa.recipeapp.data.model.Comment
 import com.appa.recipeapp.data.model.Rating
 import com.appa.recipeapp.data.model.Recipe
 import com.appa.recipeapp.data.model.currentTimeMillis
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.appa.recipeapp.data.model.UserSession
+import com.appa.recipeapp.data.remote.SupabaseConfig
 import kotlin.concurrent.Volatile
 
 class SupabaseRecipeRepository(
@@ -33,23 +35,18 @@ class SupabaseRecipeRepository(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // ─── Кэши ───
     private val recipesCache = MutableStateFlow<List<Recipe>>(emptyList())
     private val weeklyRecipesCache = MutableStateFlow<List<Recipe>>(emptyList())
     private val favoriteIdsCache = MutableStateFlow<Set<String>>(emptySet())
 
-    // Общий кэш всех аватарок по authorId
     private val avatarCache = MutableStateFlow<Map<String, String?>>(emptyMap())
 
-    // Публичный стейт для текущего пользователя (чтобы ProfileViewModel мог подписаться)
     private val _myAvatarState = MutableStateFlow<String?>(null)
     val myAvatarState: StateFlow<String?> = _myAvatarState.asStateFlow()
 
-    // ─── Кэш для количества оценок ───
     private val ratingsCountCache = MutableStateFlow<Int?>(null)
     val myRatingsCountState: StateFlow<Int?> = ratingsCountCache.asStateFlow()
 
-    // ─── Флаги состояния mainFeed ───
     private var mainFeedOffset = 0
     private var isEndReached = false
     private var isLoadingMore = false
@@ -61,12 +58,10 @@ class SupabaseRecipeRepository(
     private val _isMainFeedEndReached = MutableStateFlow(false)
     val isMainFeedEndReached: StateFlow<Boolean> = _isMainFeedEndReached.asStateFlow()
 
-    // ─── Флаги для weekly ───
     private var isWeeklyRefreshing = false
     private val _isWeeklyLoaded = MutableStateFlow(false)
     val isWeeklyLoaded: StateFlow<Boolean> = _isWeeklyLoaded.asStateFlow()
 
-    // ─── Флаги для секций ───
     private val breakfastCache = MutableStateFlow<List<Recipe>>(emptyList())
     private val lunchCache = MutableStateFlow<List<Recipe>>(emptyList())
     private val dinnerCache = MutableStateFlow<List<Recipe>>(emptyList())
@@ -74,7 +69,6 @@ class SupabaseRecipeRepository(
     private val _isSectionsLoaded = MutableStateFlow(false)
     val isSectionsLoaded: StateFlow<Boolean> = _isSectionsLoaded.asStateFlow()
 
-    // ─── Общие флаги ───
     private val _isRecipesLoaded = MutableStateFlow(false)
     val isRecipesLoaded: StateFlow<Boolean> = _isRecipesLoaded.asStateFlow()
 
@@ -117,7 +111,6 @@ class SupabaseRecipeRepository(
             }
         }
 
-        // Подписываемся на изменения avatarCache, чтобы обновлять аватарку текущего юзера
         scope.launch {
             avatarCache.collect { map ->
                 val userId = authRepository.getUserId()
@@ -137,16 +130,11 @@ class SupabaseRecipeRepository(
     private suspend fun refreshProfilesSuspend() {
         try {
             val profiles = api.getProfiles()
-            println("DEBUG refreshProfiles: получил ${profiles.size} профилей")
             val newMap = profiles.associate { it.id to it.avatarUrl }
-            println("DEBUG refreshProfiles: map = $newMap")
             if (newMap == avatarCache.value) return
             avatarCache.value = newMap
             recipesCache.value = recipesCache.value.reapplyAvatars(newMap)
-            // ...
-        } catch (e: Throwable) {
-            println("DEBUG refreshProfiles EXCEPTION: ${e::class.simpleName} — ${e.message}")
-        }
+        } catch (e: Throwable) {}
     }
 
     private fun List<Recipe>.reapplyAvatars(map: Map<String, String?>): List<Recipe> =
@@ -357,7 +345,7 @@ class SupabaseRecipeRepository(
         }
         val publicUrl = storageApi.uploadPhotoToBucket(
             accessToken = session.accessToken,
-            bucket = "avatars",
+            bucket = SupabaseConfig.AVATARS_BUCKET,
             fileName = randomName,
             bytes = bytes,
             contentType = contentType,
@@ -543,11 +531,40 @@ class SupabaseRecipeRepository(
             Rating(
                 userId = dto.userId,
                 userName = dto.userName ?: dto.userId.take(8),
+                userAvatarUrl = avatarCache.value[dto.userId],
                 stars = dto.stars,
                 comment = dto.comment,
                 createdAt = 0L,
             )
         }
+    }
+
+    suspend fun loadCommentsForRecipe(recipeId: String): List<Comment> {
+        val dtos = api.getCommentsForRecipe(recipeId)
+        val profiles = api.getProfiles().associateBy { it.id }
+
+        return dtos.map { dto ->
+            val profile = profiles[dto.userId]
+            Comment(
+                id = dto.id,
+                recipeId = dto.recipeId,
+                userId = dto.userId,
+                userName = profile?.displayName ?: "Гость",
+                userAvatarUrl = profile?.avatarUrl ?: avatarCache.value[dto.userId],
+                text = dto.text,
+                createdAt = 0L
+            )
+        }
+    }
+
+    suspend fun deleteComment(commentId: String): Boolean {
+        val session = authRepository.ensureValidSession() ?: return false
+        return api.deleteComment(session.accessToken, commentId)
+    }
+
+    suspend fun addComment(recipeId: String, text: String): Boolean {
+        val session = authRepository.ensureValidSession() ?: return false
+        return api.addComment(session.accessToken, recipeId, session.userId, text)
     }
 
     suspend fun fetchThumbnailFor(url: String): String? {
@@ -583,6 +600,15 @@ class SupabaseRecipeRepository(
             launch { refreshFavoritesSuspend() }
             launch { refreshRatingsCountSuspend() }
             launch { refreshProfilesSuspend() }
+        }
+    }
+
+    suspend fun saveFcmToken(token: String) {
+        val session = authRepository.ensureValidSession() ?: return
+        try {
+            api.saveFcmToken(session.accessToken, session.userId, token)
+        } catch (e: Throwable) {
+            println("DEBUG saveFcmToken error: ${e.message}")
         }
     }
 }

@@ -33,3 +33,10 @@ kotlin-js-store/
 nuka.js*
 
 backup/
+
+# Secrets
+google-services.json
+firebase-service-account.json
+.env
+*.env
+secrets/

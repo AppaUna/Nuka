@@ -12,31 +12,24 @@ androidx-testExt = "1.3.0"
 composeMultiplatform = "1.13.0-alpha02"
 junit = "4.13.2"
 kotlin = "2.4.20"
-kotlinxDatetime = "0.6.1"
+kotlinxDatetime = "0.7.1-0.6.x-compat"
 
-# Material3 — отдельная версия, поддерживает wasmJs
 material3 = "1.8.2"
 
-# DI
 koin = "4.2.1"
 
-# Navigation (JetBrains-версия для KMP)
 navigation = "2.9.0-alpha16"
 
-# Coil 3 для загрузки фото
 coil = "3.0.4"
 
-# Ktor (HTTP-клиент для Supabase)
 ktor = "3.0.3"
 
-# Crop — Krop вместо Crayfish (поддерживает wasmJs)
 krop = "0.3.0-alpha01"
 
 multiplatformSettings = "1.3.0"
 
 androidxCoreSplashscreen = "1.0.1"
 
-# Сериализация (нужна для type-safe navigation)
 kotlinxSerialization = "1.8.0"
 kotlinxSerializationPlugin = "2.4.20"
 
@@ -62,19 +55,15 @@ compose-components-resources = { module = "org.jetbrains.compose.components:comp
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 
-# Koin
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
 koin-annotations = { module = "io.insert-koin:koin-annotations", version.ref = "koin" }
 
-# Navigation (KMP)
 navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigation" }
 
-# Coil 3
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 
-# Ktor (нужен явно для ContentNegotiation + JSON)
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
@@ -83,20 +72,13 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 
 compose-material-icons-core = { module = "org.jetbrains.compose.material:material-icons-core", version = "1.7.3" }
 
-# Crop — Krop (ui + интеграция с FileKit)
 krop-ui = { module = "com.attafitamim.krop:ui", version.ref = "krop" }
 krop-extensions-filekit = { module = "com.attafitamim.krop:extensions-filekit", version.ref = "krop" }
 
 multiplatform-settings = { module = "com.russhwolf:multiplatform-settings", version.ref = "multiplatformSettings" }
-
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidxCoreSplashscreen" }
-
-# Ktor для WebAssembly
 ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
-
-# multiplatform-settings для Web (no-arg — содержит StorageSettings)
 multiplatform-settings-js = { module = "com.russhwolf:multiplatform-settings-no-arg", version.ref = "multiplatformSettings" }
-
 filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
 
 [plugins]

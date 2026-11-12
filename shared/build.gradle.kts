@@ -24,11 +24,14 @@ kotlin {
         browser {
             commonWebpackConfig {
                 outputFileName = "nuka.js"
-                // Отключаем sourcemap в production-сборке
-                // В dev-режиме sourcemap остаётся — для отладки через DevTools
                 devtool = null
             }
         }
+        binaries.executable()
+    }
+
+    js(IR) {
+        browser()
         binaries.executable()
     }
 
@@ -53,17 +56,16 @@ kotlin {
         }
     }
 
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
             implementation("androidx.activity:activity-compose:1.9.0")
-
-            // Ktor для Android
             implementation(libs.ktor.client.okhttp)
         }
         iosMain.dependencies {
-            // Ktor для iOS
             implementation(libs.ktor.client.darwin)
         }
 
@@ -74,8 +76,14 @@ kotlin {
             }
         }
 
+        val jsMain by getting {
+            dependencies {
+                implementation(libs.ktor.client.js)
+                implementation(libs.multiplatform.settings.js)
+            }
+        }
+
         commonMain.dependencies {
-            // Koin
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
             implementation(libs.koin.annotations)
@@ -88,30 +96,26 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
-
-            // Navigation
             implementation(libs.navigation.compose)
 
-            // Coil
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)
 
-            // Ktor (для Supabase)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
 
             implementation(libs.compose.material.icons.core)
-
             implementation(libs.kotlinx.datetime)
 
-            // Crop — Krop (работает на wasmJs)
             implementation(libs.krop.ui)
             implementation(libs.krop.extensions.filekit)
 
             implementation(libs.multiplatform.settings)
-
             implementation(libs.filekit.dialogs)
+            implementation("dev.vicart:compose-material-symbols:1.1.6")
+            implementation("io.github.alexzhirkevich:compottie:2.0.0")
+            implementation("io.github.alexzhirkevich:compottie-resources:2.0.0")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

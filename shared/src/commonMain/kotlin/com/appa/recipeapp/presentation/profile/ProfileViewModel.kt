@@ -71,7 +71,7 @@ class ProfileViewModel(
                 ratingsCount = myRatingsCount ?: 0,
                 favoritesCount = favorites.size,
                 isLoading = false,
-                avatarUrl = myAvatarUrl, // <-- Теперь аватарка всегда берется из кэша репозитория
+                avatarUrl = myAvatarUrl,
             )
         }.onEach { newState ->
             _state.value = newState
@@ -131,9 +131,19 @@ class ProfileViewModel(
         _state.value = _state.value.copy(isPersonalizationExpanded = false)
     }
 
-    fun onDeleteRecipe(recipeId: String) {
+    fun requestDeleteRecipe(recipeId: String) {
+        _state.value = _state.value.copy(recipeIdToDelete = recipeId)
+    }
+
+    fun cancelDeleteRecipe() {
+        _state.value = _state.value.copy(recipeIdToDelete = null)
+    }
+
+    fun confirmDeleteRecipe() {
+        val id = _state.value.recipeIdToDelete ?: return
+        _state.value = _state.value.copy(recipeIdToDelete = null)
         viewModelScope.launch {
-            repository.deleteRecipe(recipeId)
+            repository.deleteRecipe(id)
         }
     }
 
@@ -157,16 +167,9 @@ class ProfileViewModel(
     }
 
     fun uploadAvatar(bytes: ByteArray, ext: String = "jpg") {
-        println("DEBUG ProfileViewModel: uploadAvatar, ${bytes.size} байт")
         viewModelScope.launch {
-            val repo = repository as? SupabaseRecipeRepository ?: run {
-                println("DEBUG ProfileViewModel: repo is not SupabaseRecipeRepository")
-                return@launch
-            }
-            val newUrl = repo.uploadAvatar(bytes, ext)
-            println("DEBUG ProfileViewModel: uploadAvatar result = $newUrl")
-            // _state.value = _state.value.copy(avatarUrl = newUrl) больше не нужно
-            // combine сам подхватит новый URL из avatarFlow
+            val repo = repository as? SupabaseRecipeRepository ?: return@launch
+            repo.uploadAvatar(bytes, ext)
         }
     }
 

@@ -1,13 +1,16 @@
 package com.appa.recipeapp.presentation.profile
 
-import com.appa.recipeapp.ui.components.ScreenHeader
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,12 +34,15 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,23 +52,38 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.appa.recipeapp.data.model.Recipe
-import com.appa.recipeapp.data.repository.ThemeRepository
+import com.appa.recipeapp.platform.PlatformBackHandler
+import com.appa.recipeapp.platform.areNotificationsEnabled
+import com.appa.recipeapp.platform.disablePush
+import com.appa.recipeapp.platform.enablePush
+import com.appa.recipeapp.platform.openNotificationSettings
 import com.appa.recipeapp.platform.rememberPhotoPicker
+import com.appa.recipeapp.platform.requestNotificationPermission
+import com.appa.recipeapp.platform.savePushRequested
 import com.appa.recipeapp.presentation.editor.CropScreen
 import com.appa.recipeapp.ui.components.RecipeImage
+import com.appa.recipeapp.ui.components.ScreenHeader
+import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.AllThemes
+import com.appa.recipeapp.ui.theme.Background
+import com.appa.recipeapp.ui.theme.Error
+import com.appa.recipeapp.ui.theme.TextPrimary
+import com.appa.recipeapp.ui.theme.TextSecondary
 import io.github.vinceglb.filekit.PlatformFile
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
-import org.koin.compose.koinInject
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.profile_decor
 
@@ -74,8 +95,8 @@ fun ProfileScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    val themeRepository: ThemeRepository = koinInject()
-    val currentTheme by themeRepository.currentTheme.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     var cropFile by remember { mutableStateOf<PlatformFile?>(null) }
 
@@ -85,8 +106,18 @@ fun ProfileScreen(
         }
     }
 
+    var notificationsEnabled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        notificationsEnabled = areNotificationsEnabled()
+    }
+
     LaunchedEffect(Unit) {
         viewModel.refreshIfStale()
+    }
+
+    PlatformBackHandler(enabled = state.recipeIdToDelete != null) {
+        viewModel.cancelDeleteRecipe()
     }
 
     if (state.isLoading) {
@@ -96,18 +127,14 @@ fun ProfileScreen(
         return
     }
 
-    // Кроп-диалог для аватарки (1:1)
     cropFile?.let { file ->
         CropScreen(
             photoFile = file,
-            aspectRatio = 1 to 1,
-            onConfirm = { bytes ->
-                println("DEBUG ProfileScreen: onConfirm, ${bytes.size} байт")
+            onConfirm = { bytes, _ ->
                 viewModel.uploadAvatar(bytes, "jpg")
                 cropFile = null
             },
             onCancel = {
-                println("DEBUG ProfileScreen: onCancel")
                 cropFile = null
             },
         )
@@ -178,7 +205,7 @@ fun ProfileScreen(
                             recipe = recipe,
                             onClick = { onRecipeClick(recipe.id) },
                             onEdit = { onEditRecipe(recipe.id) },
-                            onDelete = { viewModel.onDeleteRecipe(recipe.id) },
+                            onDelete = { viewModel.requestDeleteRecipe(recipe.id) },
                         )
                     }
                 }
@@ -187,11 +214,12 @@ fun ProfileScreen(
 
             item {
                 ExpandableHeader(
-                    title = "Персонализация",
+                    title = "Настройки",
                     isExpanded = state.isPersonalizationExpanded,
                     onClick = viewModel::togglePersonalization,
                 )
             }
+
             if (state.isPersonalizationExpanded) {
                 item {
                     EditableNameRow(
@@ -216,26 +244,87 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.primary)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { viewModel.applyPersonalization() }
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = "Применить",
-                            color = MaterialTheme.colorScheme.background,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
                             fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }
                 item { Spacer(Modifier.height(16.dp)) }
                 item {
                     InlineThemeSelector(
-                        currentThemeId = currentTheme.id,
-                        onSelect = { themeId -> themeRepository.setTheme(themeId) },
+                        currentThemeId = "default",
+                        onSelect = {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Возможно когда-нибудь сделаю")
+                            }
+                        },
                     )
+                }
+
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Text(
+                            text = "Уведомления",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 14.sp,
+                        )
+                        Spacer(Modifier.height(10.dp))
+
+                        val buttonColor by animateColorAsState(
+                            targetValue = if (notificationsEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                            label = "buttonColor"
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(buttonColor)
+                                .clickable {
+                                    if (notificationsEnabled) {
+                                        openNotificationSettings()
+                                        disablePush()
+                                    } else {
+                                        savePushRequested()
+                                        enablePush()
+                                        requestNotificationPermission()
+                                    }
+
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(1000)
+                                        notificationsEnabled = areNotificationsEnabled()
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Crossfade(
+                                targetState = notificationsEnabled,
+                                animationSpec = tween(300),
+                                label = "textAnimation"
+                            ) { enabled ->
+                                Text(
+                                    text = if (enabled) "Выключить уведомления" else "Включить уведомления",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
             item { ThinDivider() }
@@ -259,12 +348,140 @@ fun ProfileScreen(
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 100.dp),
+            snackbar = { data ->
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = data.visuals.message,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        )
+    }
+
+    if (state.recipeIdToDelete != null) {
+        DeleteRecipeDialog(
+            onCancel = { viewModel.cancelDeleteRecipe() },
+            onConfirm = { viewModel.confirmDeleteRecipe() },
+        )
     }
 }
 
-// ═══════════════════════════════════════════
-// КОМПОНЕНТЫ
-// ═══════════════════════════════════════════
+@Composable
+private fun DeleteRecipeDialog(
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xCC000000))
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onCancel() })
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 40.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Background)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {}
+                ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "Удалить рецепт?",
+                    color = TextPrimary,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = "Это действие нельзя будет отменить. Рецепт удалится навсегда. Типо реально",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val inter1 = remember { MutableInteractionSource() }
+                    val pressed1 by inter1.collectIsPressedAsState()
+                    val scale1 by animateFloatAsState(if (pressed1) 0.95f else 1f, tween(100))
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .graphicsLayer(scaleX = scale1, scaleY = scale1)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(0.7.dp, Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .clickable(
+                                interactionSource = inter1,
+                                indication = null,
+                                onClick = onCancel
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Отмена", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    }
+
+                    val inter2 = remember { MutableInteractionSource() }
+                    val pressed2 by inter2.collectIsPressedAsState()
+                    val scale2 by animateFloatAsState(if (pressed2) 0.95f else 1f, tween(100))
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .graphicsLayer(scaleX = scale2, scaleY = scale2)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Error)
+                            .clickable(
+                                interactionSource = inter2,
+                                indication = null,
+                                onClick = onConfirm
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Удалить", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun UserBlock(
@@ -562,24 +779,19 @@ private fun InlineThemeSelector(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             AllThemes.forEach { theme ->
-                val isPlaceholder = theme.id == "halloween"
                 val isSelected = theme.id == currentThemeId
 
                 Text(
                     text = theme.displayName,
-                    color = when {
-                        isPlaceholder -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        isSelected -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.onBackground
-                    },
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
                     fontSize = 14.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier
-                        .clickable(enabled = !isPlaceholder,
+                        .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) {
-                            if (!isPlaceholder) onSelect(theme.id)
+                            onSelect(theme.id)
                         }
                         .padding(vertical = 4.dp)
                 )
