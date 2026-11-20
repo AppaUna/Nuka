@@ -9,6 +9,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import coil3.ImageLoader
 import com.appa.recipeapp.data.remote.SupabaseAuthApi
@@ -26,7 +28,9 @@ import com.appa.recipeapp.platform.createSettings
 import com.appa.recipeapp.platform.saveUserIdToStorage
 import com.appa.recipeapp.presentation.favorites.FavoritesViewModel
 import com.appa.recipeapp.presentation.home.HomeViewModel
+import com.appa.recipeapp.ui.components.SnowfallOverlay
 import com.appa.recipeapp.ui.theme.AppTheme
+import com.appa.recipeapp.ui.theme.NewYearTheme
 import com.russhwolf.settings.Settings
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.KoinApplication
@@ -72,8 +76,8 @@ fun App(initialUrl: String = "/") {
         val themeRepository: ThemeRepository = koinInject()
         val currentTheme by themeRepository.currentTheme.collectAsState()
         val authRepository: SupabaseAuthRepository = koinInject()
+        val isNewYear = currentTheme.id == NewYearTheme.id
 
-        // Наблюдаем за сессией. Как только user_id появляется — сохраняем в localStorage.
         LaunchedEffect(Unit) {
             authRepository.session.collect { session ->
                 val userId = session?.userId
@@ -89,14 +93,39 @@ fun App(initialUrl: String = "/") {
                     painter = painterResource(Res.drawable.bg_texture),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    alpha = if (isNewYear) 0.45f else 1f,
                     modifier = Modifier.fillMaxSize(),
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(currentTheme.colors.background.copy(alpha = 0.88f)),
+                        .background(
+                            if (isNewYear) {
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFF060E18).copy(alpha = 0.92f),
+                                        currentTheme.colors.background.copy(alpha = 0.90f),
+                                        Color(0xFF0A1B2E).copy(alpha = 0.94f),
+                                    )
+                                )
+                            } else {
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        currentTheme.colors.background.copy(alpha = 0.88f),
+                                        currentTheme.colors.background.copy(alpha = 0.88f),
+                                    )
+                                )
+                            }
+                        ),
                 )
+
                 AppNavHost(initialUrl = initialUrl)
+
+                if (isNewYear) {
+                    SnowfallOverlay(
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }

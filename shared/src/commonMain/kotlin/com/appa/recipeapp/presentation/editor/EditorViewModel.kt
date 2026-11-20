@@ -2,6 +2,8 @@ package com.appa.recipeapp.presentation.editor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import com.appa.recipeapp.data.model.Ingredient
 import com.appa.recipeapp.data.model.MusicTrack
 import com.appa.recipeapp.data.model.Recipe
@@ -17,6 +19,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -59,17 +63,81 @@ class EditorViewModel(
                 saveDraftImmediate(currentState)
             }
         }.launchIn(viewModelScope)
+
+        startTextFieldSync()
+    }
+
+    private fun startTextFieldSync() {
+        viewModelScope.launch {
+            snapshotFlow { _state.value.titleField.text.toString() }
+                .debounce(150)
+                .distinctUntilChanged()
+                .collect { text ->
+                    if (_state.value.title != text) {
+                        _state.value = _state.value.copy(title = text)
+                    }
+                }
+        }
+        viewModelScope.launch {
+            snapshotFlow { _state.value.descriptionField.text.toString() }
+                .debounce(150)
+                .distinctUntilChanged()
+                .collect { text ->
+                    if (_state.value.description != text) {
+                        _state.value = _state.value.copy(description = text)
+                    }
+                }
+        }
+        viewModelScope.launch {
+            snapshotFlow { _state.value.cookingTimeField.text.toString() }
+                .debounce(150)
+                .distinctUntilChanged()
+                .collect { text ->
+                    val digits = text.filter { it.isDigit() }
+                    if (_state.value.cookingTime != digits) {
+                        _state.value = _state.value.copy(cookingTime = digits)
+                    }
+                }
+        }
+        viewModelScope.launch {
+            snapshotFlow { _state.value.notesField.text.toString() }
+                .debounce(150)
+                .distinctUntilChanged()
+                .collect { text ->
+                    if (_state.value.notes != text) {
+                        _state.value = _state.value.copy(notes = text)
+                    }
+                }
+        }
+        viewModelScope.launch {
+            snapshotFlow { _state.value.newTagField.text.toString() }
+                .debounce(150)
+                .distinctUntilChanged()
+                .collect { text ->
+                    if (_state.value.newTagDraft != text) {
+                        _state.value = _state.value.copy(newTagDraft = text)
+                    }
+                }
+        }
+        viewModelScope.launch {
+            snapshotFlow { _state.value.musicNoteField.text.toString() }
+                .debounce(150)
+                .distinctUntilChanged()
+                .collect { text ->
+                    if (_state.value.musicNote != text) {
+                        _state.value = _state.value.copy(musicNote = text)
+                    }
+                }
+        }
     }
 
     @OptIn(ExperimentalEncodingApi::class)
     private fun saveDraftImmediate(state: EditorState) {
         try {
-            // --- ЛОГИ ---
             val mainPhotoSize = state.photoBytes?.size ?: 0
             val stepsPhotoSize = state.steps.sumOf { it.photoBytes?.size ?: 0 }
             println("NUKA_DEBUG: Байты главного фото в стейте = $mainPhotoSize")
             println("NUKA_DEBUG: Байты фото шагов в стейте = $stepsPhotoSize")
-            // -----------
 
             val stateToSave = state.copy(
                 photoBase64 = state.photoBytes?.let { Base64.encode(it) },
@@ -113,6 +181,12 @@ class EditorViewModel(
             )
             println("NUKA_DEBUG: Восстановлено фото шагов: ${restoredState.steps.count { it.photoBytes != null }}")
             _state.value = restoredState
+            _state.value.titleField.setTextAndPlaceCursorAtEnd(restoredState.title)
+            _state.value.descriptionField.setTextAndPlaceCursorAtEnd(restoredState.description)
+            _state.value.cookingTimeField.setTextAndPlaceCursorAtEnd(restoredState.cookingTime)
+            _state.value.notesField.setTextAndPlaceCursorAtEnd(restoredState.notes)
+            _state.value.newTagField.setTextAndPlaceCursorAtEnd(restoredState.newTagDraft)
+            _state.value.musicNoteField.setTextAndPlaceCursorAtEnd(restoredState.musicNote)
             nextIngredientId = (draftState.ingredients.maxOfOrNull { it.id } ?: 0L) + 1
             nextStepId = (draftState.steps.maxOfOrNull { it.id } ?: 0L) + 1
             nextTrackId = (draftState.musicTracks.maxOfOrNull { it.id } ?: 0L) + 1
@@ -176,20 +250,17 @@ class EditorViewModel(
                     notes = recipe.notes,
                     isLoading = false,
                 )
+                _state.value.titleField.setTextAndPlaceCursorAtEnd(recipe.title)
+                _state.value.descriptionField.setTextAndPlaceCursorAtEnd(recipe.description)
+                _state.value.cookingTimeField.setTextAndPlaceCursorAtEnd(recipe.cookingTimeMinutes.toString())
+                _state.value.notesField.setTextAndPlaceCursorAtEnd(recipe.notes)
+                _state.value.musicNoteField.setTextAndPlaceCursorAtEnd(recipe.musicNote)
                 nextIngredientId = (recipe.ingredients.size).toLong()
                 nextStepId = (recipe.steps.size).toLong()
                 nextTrackId = (recipe.musicTracks.size).toLong()
             }
             .launchIn(viewModelScope)
     }
-
-    fun onTitleChange(text: String) { _state.value = _state.value.copy(title = text) }
-    fun onDescriptionChange(text: String) { _state.value = _state.value.copy(description = text) }
-    fun onCookingTimeChange(text: String) {
-        val digits = text.filter { it.isDigit() }
-        _state.value = _state.value.copy(cookingTime = digits)
-    }
-    fun onNotesChange(text: String) { _state.value = _state.value.copy(notes = text) }
 
     fun addIngredient() { _state.value = _state.value.copy(ingredients = _state.value.ingredients + IngredientDraft(id = nextIngredientId++)) }
     fun removeIngredient(id: Long) {
@@ -274,7 +345,6 @@ class EditorViewModel(
         val updated = if (tag in current) current - tag else current + tag
         _state.value = _state.value.copy(selectedTags = updated)
     }
-    fun onNewTagChange(text: String) { _state.value = _state.value.copy(newTagDraft = text) }
     fun addNewTag() {
         val tag = _state.value.newTagDraft.trim().lowercase()
         if (tag.isBlank()) return
@@ -283,9 +353,9 @@ class EditorViewModel(
             allTags = (_state.value.allTags + tag).distinct().sorted(),
             newTagDraft = "",
         )
+        _state.value.newTagField.setTextAndPlaceCursorAtEnd("")
     }
 
-    fun onMusicNoteChange(text: String) { _state.value = _state.value.copy(musicNote = text) }
     fun addMusicTrack() { _state.value = _state.value.copy(musicTracks = _state.value.musicTracks + MusicTrackDraft(id = nextTrackId++)) }
     fun removeMusicTrack(id: Long) {
         thumbnailJobs[id]?.cancel()

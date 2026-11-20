@@ -20,10 +20,40 @@
 <div id="compose-root"></div>
 
 <script>
+    const APP_VERSION = 'v18';
+    const savedVersion = localStorage.getItem('nuka_app_version');
+
+    if (savedVersion && savedVersion !== APP_VERSION) {
+        localStorage.setItem('nuka_app_version', APP_VERSION);
+        window.location.replace(window.location.href.split('?')[0] + '?v=' + APP_VERSION);
+    } else {
+        localStorage.setItem('nuka_app_version', APP_VERSION);
+    }
+
+    let refreshing = false;
+    navigator.serviceWorker?.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+    });
+
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/js/sw.js', { scope: '/js/' })
-                .then((reg) => { console.log('JS SW registered:', reg.scope); reg.update(); })
+                .then((reg) => {
+                    reg.update();
+                    if (reg.waiting) {
+                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        });
+                    });
+                })
                 .catch((err) => console.error('JS SW error:', err));
         });
     }
@@ -33,14 +63,12 @@
     const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNTU2NTk3LCJleHAiOjIxMDY5MTY1OTd9.7uo_yuo7gtD0UqStd4TKbjee1lhHkz_lCSLmBRCTgyI';
 
     window.requestPushPermission = async function() {
-        console.log('DEBUG JS: requestPushPermission ВЫЗВАНА из Compose!');
         if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-            console.log('Push: Устройство не поддерживает уведомления');
             return;
         }
         try {
             const permission = await Notification.requestPermission();
-            if (permission !== 'granted') { console.log('Push: Разрешение не получено'); return; }
+            if (permission !== 'granted') { return; }
 
             const registration = await navigator.serviceWorker.ready;
             const response = await fetch('/push-api/vapid-public-key');
@@ -52,7 +80,7 @@
             });
 
             const userId = localStorage.getItem('nuka_user_id');
-            if (!userId) { console.warn('Push: Нет user_id'); return; }
+            if (!userId) { return; }
 
             const subJson = subscription.toJSON();
 
@@ -67,24 +95,21 @@
                 body: JSON.stringify({ user_id: userId, endpoint: subJson.endpoint, p256dh: subJson.keys.p256dh, auth: subJson.keys.auth })
             });
 
-            if (!res.ok) { const errorText = await res.text(); console.error('Push: Ошибка сохранения:', errorText); return; }
+            if (!res.ok) { return; }
             localStorage.setItem('push_enabled', 'true');
-            console.log('Push: Подписка успешно сохранена!');
-        } catch (e) { console.error('Push: Ошибка подписки', e); }
+        } catch (e) { }
     };
 
     window.disablePushPermission = async function() {
-        console.log('DEBUG JS: disablePushPermission ВЫЗВАНА из Compose!');
         try {
             const userId = localStorage.getItem('nuka_user_id');
-            if (!userId) { console.warn('Push: Нет user_id'); return; }
+            if (!userId) { return; }
             await fetch(`https://nukaapp.duckdns.org:8446/api/rest/v1/push_subscriptions?user_id=eq.${userId}`, { method: 'DELETE', headers: { 'apikey': ANON_KEY } });
             const registration = await navigator.serviceWorker.ready;
             const subscription = await registration.pushManager.getSubscription();
             if (subscription) { await subscription.unsubscribe(); }
             localStorage.setItem('push_enabled', 'false');
-            console.log('Push: Уведомления выключены!');
-        } catch (e) { console.error('Push: Ошибка отключения', e); }
+        } catch (e) { }
     };
 
     function urlBase64ToUint8Array(base64String) {
@@ -95,6 +120,41 @@
         for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
         return outputArray;
     }
+</script>
+
+<script>
+    window.nukaCanvas = window.nukaCanvas || {};
+    window.nukaCanvas.compressAsync = function(uint8Array, maxSize, quality, callback) {
+        const blob = new Blob([uint8Array], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            if (width > maxSize || height > maxSize) {
+                if (width > height) {
+                    height = Math.round(height * maxSize / width);
+                    width = maxSize;
+                } else {
+                    width = Math.round(width * maxSize / height);
+                    height = maxSize;
+                }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', quality / 100);
+            URL.revokeObjectURL(url);
+            callback(dataUrl.split(',')[1]);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            callback(null);
+        };
+        img.src = url;
+    };
 </script>
 
 <script src="shared.js"></script>

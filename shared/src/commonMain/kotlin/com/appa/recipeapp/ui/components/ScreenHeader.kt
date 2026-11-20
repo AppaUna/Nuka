@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,13 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.appa.recipeapp.ui.theme.TextPrimary
-import com.appa.recipeapp.ui.theme.TextSecondary
 
-/**
- * Единый заголовок экрана — используется на Home, Favorites, Profile.
- * Высота адаптивная — subtitle не пропадает, даже если title длинный.
- */
 @Composable
 fun ScreenHeader(
     title: String,
@@ -48,7 +43,7 @@ fun ScreenHeader(
         ) {
             Text(
                 text = title,
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
@@ -58,7 +53,7 @@ fun ScreenHeader(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = subtitle,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                 )
             }

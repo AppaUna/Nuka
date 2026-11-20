@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.datetime.Instant
 
 @Immutable
 @Serializable
@@ -131,7 +132,7 @@ fun RecipeDto.toDomain(
     photoUrls = listOfNotNull(photoUrl?.takeIf { it.isNotBlank() }),
     ratings = emptyList(),
     cookingTimeMinutes = cookingTimeMinutes,
-    createdAt = 0L,
+    createdAt = parseIsoDateToMillis(createdAt),
     isFavorite = id in favoriteIds,
     musicNote = musicNote,
     musicTracks = parseMusicTracks(musicTracks),
@@ -192,5 +193,15 @@ private fun parseMusicTracks(element: JsonElement?): List<MusicTrack> {
         element.map { dtoJson.decodeFromJsonElement(MusicTrack.serializer(), it) }
     } catch (e: Throwable) {
         emptyList()
+    }
+}
+
+
+fun parseIsoDateToMillis(isoString: String?): Long {
+    if (isoString.isNullOrBlank()) return 0L
+    return try {
+        Instant.parse(isoString).toEpochMilliseconds()
+    } catch (e: Throwable) {
+        0L
     }
 }

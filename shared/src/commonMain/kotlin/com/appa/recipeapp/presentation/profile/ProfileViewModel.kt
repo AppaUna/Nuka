@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.appa.recipeapp.data.repository.RecipeRepository
 import com.appa.recipeapp.data.repository.SupabaseAuthRepository
 import com.appa.recipeapp.data.repository.SupabaseRecipeRepository
+import com.appa.recipeapp.data.repository.ThemeRepository
 import com.appa.recipeapp.data.repository.UserPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +19,7 @@ class ProfileViewModel(
     private val repository: RecipeRepository,
     private val authRepository: SupabaseAuthRepository,
     private val userPreferences: UserPreferencesRepository,
+    private val themeRepository: ThemeRepository,
     private val onLogout: () -> Unit,
 ) : ViewModel() {
 
@@ -32,9 +34,16 @@ class ProfileViewModel(
             login = authRepository.getLogin(),
             displayName = authRepository.getDisplayName(),
             selectedNameColor = userPreferences.getNameColor(),
+            currentThemeId = themeRepository.currentTheme.value.id,
         )
 
         observeData()
+
+        themeRepository.currentTheme
+            .onEach { theme ->
+                _state.value = _state.value.copy(currentThemeId = theme.id)
+            }
+            .launchIn(viewModelScope)
 
         userPreferences.nameColor
             .onEach { color ->
@@ -49,6 +58,10 @@ class ProfileViewModel(
                 }
             }
             .launchIn(viewModelScope)
+    }
+
+    fun selectTheme(themeId: String): Boolean {
+        return themeRepository.setTheme(themeId)
     }
 
     private fun observeData() {

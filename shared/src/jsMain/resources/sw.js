@@ -1,5 +1,4 @@
-// VERSION: 2026-11-06-js-2
-const CACHE_NAME = 'nuka-js-v8';
+const CACHE_NAME = 'nuka-js-v18';
 const APP_SHELL = [
     '/js/',
     '/js/index.html',
@@ -83,9 +82,6 @@ self.addEventListener('message', (event) => {
     }
 });
 
-// ==========================================
-// PUSH УВЕДОМЛЕНИЯ
-// ==========================================
 self.addEventListener('push', function(event) {
     if (!event.data) return;
 

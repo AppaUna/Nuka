@@ -14,9 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import com.appa.recipeapp.platform.bytesToImageBitmap
-import com.appa.recipeapp.platform.imageBitmapToJpegBytes
-import com.appa.recipeapp.platform.imageBitmapToWebpBytes
-import com.appa.recipeapp.platform.resizeImageBitmap
+import com.appa.recipeapp.platform.compressImageBytesAsync
+import com.appa.recipeapp.platform.imageBitmapToJpegBytesAsync
+import com.appa.recipeapp.platform.imageBitmapToWebpBytesAsync
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
 import com.attafitamim.krop.core.crop.AspectRatio
@@ -38,62 +38,63 @@ fun CropScreen(
 ) {
     val imageCropper = rememberImageCropper()
     var sourceBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    var originalBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var isReady by remember { mutableStateOf(false) }
 
     LaunchedEffect(photoFile) {
-        val bytes = try {
-            photoFile.readBytes().also { originalBytes = it }
+        val rawBytes = try {
+            photoFile.readBytes()
         } catch (e: Throwable) {
             e.printStackTrace()
             onCancel()
             return@LaunchedEffect
         }
 
-        val bitmap = bytesToImageBitmap(bytes)
+        val compressedBytes = compressImageBytesAsync(rawBytes, 1280, 80)
+        val bitmapBytes = compressedBytes ?: rawBytes
+
+        val bitmap = bytesToImageBitmap(bitmapBytes)
         if (bitmap == null) {
-            onConfirm(bytes, null)
+            onCancel()
             return@LaunchedEffect
         }
+
         sourceBitmap = bitmap
+        isReady = true
     }
 
-    LaunchedEffect(sourceBitmap) {
+    LaunchedEffect(sourceBitmap, isReady) {
         val bmp = sourceBitmap ?: return@LaunchedEffect
+        if (!isReady) return@LaunchedEffect
+
         val result = imageCropper.crop(bmp)
         when (result) {
             is CropResult.Success -> {
-                val resizedBitmap = resizeImageBitmap(result.bitmap, 1920)
-                val webpBytes = imageBitmapToWebpBytes(resizedBitmap, 80)
-                val finalBytes = webpBytes ?: imageBitmapToJpegBytes(resizedBitmap)
-
-                // --- ЛОГИ ---
-                println("NUKA_DEBUG: Оригинал весил ${originalBytes?.size ?: 0} байт")
-                println("NUKA_DEBUG: После WebP (90%) весит ${webpBytes?.size ?: 0} байт")
-                println("NUKA_DEBUG: Итоговый размер (JPEG fallback) ${finalBytes?.size ?: 0} байт")
-                // -----------
+                // Кодируем кропнутый bitmap через Skia encodeToData (быстро, без зависаний)
+                val webpBytes = imageBitmapToWebpBytesAsync(result.bitmap, 80)
+                val finalBytes = webpBytes ?: imageBitmapToJpegBytesAsync(result.bitmap)
 
                 if (finalBytes != null) {
                     onConfirm(finalBytes, null)
                 } else {
-                    val fallback = originalBytes
-                    if (fallback != null) onConfirm(fallback, null) else onCancel()
+                    onCancel()
                 }
             }
             CropResult.Cancelled -> onCancel()
-            CropError.LoadingError, CropError.SavingError -> onCancel()
+            is CropError -> onCancel()
         }
+        sourceBitmap = null
     }
 
-    imageCropper.cropState?.let { cropState ->
-        ImageCropperDialog(
-            state = cropState,
-            style = cropperStyle(
-                aspects = listOf(AspectRatio(aspectRatio.first, aspectRatio.second)),
+    if (isReady) {
+        imageCropper.cropState?.let { cropState ->
+            ImageCropperDialog(
+                state = cropState,
+                style = cropperStyle(
+                    aspects = listOf(AspectRatio(aspectRatio.first, aspectRatio.second)),
+                ),
             )
-        )
-    }
-
-    if (sourceBitmap == null) {
+        }
+    } else {
         Box(
             modifier = Modifier.fillMaxSize().background(Background),
             contentAlignment = Alignment.Center,

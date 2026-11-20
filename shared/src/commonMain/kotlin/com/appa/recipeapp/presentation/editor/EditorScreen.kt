@@ -1,9 +1,15 @@
 package com.appa.recipeapp.presentation.editor
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,11 +32,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -39,14 +45,18 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -58,6 +68,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,9 +76,18 @@ import coil3.compose.AsyncImage
 import com.appa.recipeapp.platform.PlatformBackHandler
 import com.appa.recipeapp.platform.bytesToImageBitmap
 import com.appa.recipeapp.platform.rememberPhotoPicker
+import com.appa.recipeapp.ui.components.InteractiveSnowfallLayer
+import com.appa.recipeapp.ui.components.WinterCardStyle
+import com.appa.recipeapp.ui.components.WinterConservatoryBackdrop
+import com.appa.recipeapp.ui.components.arcticGlassCard
+import com.appa.recipeapp.ui.components.festiveTapBurst
+import com.appa.recipeapp.ui.components.observeSnowPointer
+import com.appa.recipeapp.ui.components.rememberSnowSimulationState
+import com.appa.recipeapp.ui.components.winterRecipeCard
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
 import com.appa.recipeapp.ui.theme.Error
+import com.appa.recipeapp.ui.theme.NewYearTheme
 import com.appa.recipeapp.ui.theme.Surface
 import com.appa.recipeapp.ui.theme.SurfaceVariant
 import com.appa.recipeapp.ui.theme.TextPrimary
@@ -76,6 +96,7 @@ import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.bg_texture
 import recipeapp.shared.generated.resources.editor_decor
+import kotlin.math.PI
 
 @Composable
 fun EditorScreen(
@@ -84,6 +105,7 @@ fun EditorScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val movingStepId by viewModel.movingStepId.collectAsStateWithLifecycle()
+    val isNewYear = MaterialTheme.colorScheme.primary == NewYearTheme.colors.accent
 
     val photoPicker = rememberPhotoPicker(
         onPhotoPicked = { file -> viewModel.onCropStart(file) }
@@ -102,39 +124,76 @@ fun EditorScreen(
     }
 
     val scrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
+    val snowState = rememberSnowSimulationState(flakeCount = 24)
+    val winterTransition = rememberInfiniteTransition(label = "winter_editor_loop")
+    val lightPhase by winterTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 6000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "editor_light_phase",
+    )
 
     if (state.isLoading) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Background),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (isNewYear) Color(0xFF060F1B) else Background),
             contentAlignment = Alignment.Center,
         ) {
-            CircularProgressIndicator(color = Accent)
+            CircularProgressIndicator(color = if (isNewYear) NewYearTheme.colors.accent else Accent)
         }
         return
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Image(
-            painter = painterResource(Res.drawable.bg_texture),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alpha = 0.15f,
-            modifier = Modifier.matchParentSize(),
-        )
-
-        Image(
-            painter = painterResource(Res.drawable.editor_decor),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            alpha = 0.12f,
-            colorFilter = ColorFilter.colorMatrix(
-                ColorMatrix().apply { setToSaturation(0f) }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (isNewYear) {
+                    Modifier
+                        .background(Color(0xFF060F1B))
+                        .observeSnowPointer(snowState = snowState, enabled = true)
+                } else {
+                    Modifier
+                },
             ),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(280.dp)
-                .offset(x = 60.dp, y = 60.dp),
-        )
+    ) {
+        if (isNewYear) {
+            WinterConservatoryBackdrop(
+                scrollParallax = scrollState.value * 0.14f,
+                modifier = Modifier.fillMaxSize(),
+            )
+            InteractiveSnowfallLayer(
+                snowState = snowState,
+                topFadeStartFraction = 0.08f,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Image(
+                painter = painterResource(Res.drawable.bg_texture),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alpha = 0.15f,
+                modifier = Modifier.matchParentSize(),
+            )
+
+            Image(
+                painter = painterResource(Res.drawable.editor_decor),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                alpha = 0.12f,
+                colorFilter = ColorFilter.colorMatrix(
+                    ColorMatrix().apply { setToSaturation(0f) }
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(280.dp)
+                    .offset(x = 60.dp, y = 60.dp),
+            )
+        }
 
         Column(modifier = Modifier.fillMaxSize()) {
             EditorTopBar(
@@ -142,6 +201,8 @@ fun EditorScreen(
                 canSave = state.isValid && !state.isSaving,
                 saveStatusText = state.saveStatusText,
                 isSaving = state.isSaving,
+                isNewYear = isNewYear,
+                lightPhase = lightPhase,
                 onBack = {
                     if (state.hasChanges) viewModel.onBackPressed() else onBack()
                 },
@@ -155,19 +216,20 @@ fun EditorScreen(
                     .padding(bottom = 32.dp),
             ) {
                 if (state.isDraftRestored) {
+                    val draftAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Accent.copy(alpha = 0.15f))
+                            .background(draftAccent.copy(alpha = 0.15f))
                             .padding(12.dp),
                     ) {
                         Text(
                             text = "Черновик восстановлен",
-                            color = Accent,
+                            color = draftAccent,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
                         )
                     }
                 }
@@ -175,45 +237,49 @@ fun EditorScreen(
                 PhotoPickerBlock(
                     photoUri = state.photoUri,
                     photoBytes = state.photoBytes,
+                    isNewYear = isNewYear,
+                    lightPhase = lightPhase,
                     onClick = { photoPicker.launch() },
                     onRemove = { viewModel.removeMainPhoto() },
                 )
 
                 EditorField(
                     label = "Название",
-                    value = state.title,
-                    onValueChange = viewModel::onTitleChange,
+                    textFieldState = state.titleField,
                     placeholder = "Введи название рецепта...",
                     singleLine = true,
                     isRequired = true,
+                    isNewYear = isNewYear,
                 )
 
                 TagsSection(
                     allTags = state.allTags,
                     selectedTags = state.selectedTags,
-                    newTagDraft = state.newTagDraft,
+                    newTagField = state.newTagField,
                     onTagClick = viewModel::toggleTag,
-                    onNewTagChange = viewModel::onNewTagChange,
                     onAddNewTag = viewModel::addNewTag,
+                    isNewYear = isNewYear,
                 )
 
                 EditorField(
                     label = "Описание",
-                    value = state.description,
-                    onValueChange = viewModel::onDescriptionChange,
+                    textFieldState = state.descriptionField,
                     placeholder = "Расскажи о рецепте...",
                     singleLine = false,
                     minHeight = 100.dp,
+                    isNewYear = isNewYear,
                 )
 
                 EditorField(
                     label = "Время готовки (мин)",
-                    value = state.cookingTime,
-                    onValueChange = viewModel::onCookingTimeChange,
+                    textFieldState = state.cookingTimeField,
                     placeholder = "30",
                     singleLine = true,
                     isRequired = true,
+                    isNewYear = isNewYear,
                 )
+
+                if (isNewYear) EditorHairlineDivider()
 
                 IngredientsSection(
                     ingredients = state.ingredients,
@@ -221,7 +287,10 @@ fun EditorScreen(
                     onRemove = viewModel::removeIngredient,
                     onNameChange = viewModel::updateIngredientName,
                     onQuantityChange = viewModel::updateIngredientQuantity,
+                    isNewYear = isNewYear,
                 )
+
+                if (isNewYear) EditorHairlineDivider()
 
                 StepsSection(
                     steps = state.steps,
@@ -236,25 +305,29 @@ fun EditorScreen(
                         stepPhotoPicker.launch()
                     },
                     onPhotoRemove = { stepId -> viewModel.removeStepPhoto(stepId) },
+                    isNewYear = isNewYear,
+                    lightPhase = lightPhase,
                 )
+
+                if (isNewYear) EditorHairlineDivider()
 
                 EditorField(
                     label = "Заметки",
-                    value = state.notes,
-                    onValueChange = viewModel::onNotesChange,
+                    textFieldState = state.notesField,
                     placeholder = "Запиши что ещё требует упоминания",
                     singleLine = false,
                     minHeight = 80.dp,
+                    isNewYear = isNewYear,
                 )
 
                 MusicSection(
-                    note = state.musicNote,
+                    musicNoteField = state.musicNoteField,
                     tracks = state.musicTracks,
-                    onNoteChange = viewModel::onMusicNoteChange,
                     onAddTrack = viewModel::addMusicTrack,
                     onRemoveTrack = viewModel::removeMusicTrack,
                     onTrackTitleChange = viewModel::updateMusicTrackTitle,
                     onTrackUrlChange = viewModel::updateMusicTrackUrl,
+                    isNewYear = isNewYear,
                 )
             }
         }
@@ -272,6 +345,7 @@ fun EditorScreen(
         if (state.showExitDialog) {
             ExitConfirmDialog(
                 isNewRecipe = state.recipeId == null,
+                isNewYear = isNewYear,
                 onCancel = { viewModel.cancelExit() },
                 onSaveDraft = { viewModel.saveDraftAndExit(onBack) },
                 onExitWithoutSaving = { viewModel.exitWithoutSaving(onBack) },
@@ -281,14 +355,38 @@ fun EditorScreen(
 }
 
 @Composable
+private fun EditorHairlineDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 14.dp)
+            .height(1.dp)
+            .background(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color(0xFF38BDF8).copy(alpha = 0.22f),
+                        Color(0xFF818CF8).copy(alpha = 0.26f),
+                        Color(0xFF38BDF8).copy(alpha = 0.22f),
+                        Color.Transparent,
+                    ),
+                ),
+            ),
+    )
+}
+
+@Composable
 private fun EditorTopBar(
     title: String,
     canSave: Boolean,
     saveStatusText: String,
     isSaving: Boolean,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
     onBack: () -> Unit,
     onSave: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -299,6 +397,7 @@ private fun EditorTopBar(
         Box(
             modifier = Modifier
                 .size(40.dp)
+                .festiveTapBurst(enabled = isNewYear, cornerRadius = 20.dp)
                 .clip(CircleShape)
                 .clickable(onClick = onBack),
             contentAlignment = Alignment.Center,
@@ -321,7 +420,7 @@ private fun EditorTopBar(
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (isSaving) {
                 CircularProgressIndicator(
-                    color = Accent,
+                    color = activeAccent,
                     strokeWidth = 2.dp,
                     modifier = Modifier.size(16.dp),
                 )
@@ -329,12 +428,13 @@ private fun EditorTopBar(
             }
             Text(
                 text = saveStatusText,
-                color = if (canSave && !isSaving) Accent
-                else if (isSaving) Accent
+                color = if (canSave && !isSaving) activeAccent
+                else if (isSaving) activeAccent
                 else TextSecondary.copy(alpha = 0.5f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
+                    .festiveTapBurst(enabled = isNewYear && canSave && !isSaving, cornerRadius = 8.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(enabled = canSave && !isSaving, onClick = onSave)
                     .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -347,9 +447,12 @@ private fun EditorTopBar(
 private fun PhotoPickerBlock(
     photoUri: String?,
     photoBytes: ByteArray?,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     val bitmap = remember(photoBytes) {
         photoBytes?.let { bytesToImageBitmap(it) }
     }
@@ -365,11 +468,26 @@ private fun PhotoPickerBlock(
                 .fillMaxWidth()
                 .height(240.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Surface.copy(alpha = 0.6f))
-                .border(
-                    width = 1.dp,
-                    color = TextSecondary.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(16.dp),
+                .background(
+                    if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.72f)
+                    else Surface.copy(alpha = 0.6f),
+                )
+                .then(
+                    if (isNewYear) {
+                        Modifier.winterRecipeCard(
+                            enabled = true,
+                            style = WinterCardStyle.Large,
+                            cornerRadius = 16.dp,
+                            highlightPhase = lightPhase,
+                            isFocused = hasPhoto,
+                        )
+                    } else {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = TextSecondary.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                    },
                 )
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
@@ -395,7 +513,7 @@ private fun PhotoPickerBlock(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "+",
-                            color = Accent,
+                            color = activeAccent,
                             fontSize = 40.sp,
                             fontWeight = FontWeight.Light,
                         )
@@ -438,14 +556,17 @@ private fun PhotoPickerBlock(
 @Composable
 private fun EditorField(
     label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
+    textFieldState: TextFieldState,
     placeholder: String,
     singleLine: Boolean,
-    minHeight: androidx.compose.ui.unit.Dp = 48.dp,
+    minHeight: Dp = 48.dp,
     isRequired: Boolean = false,
+    isNewYear: Boolean = false,
 ) {
     val maxHeight = if (singleLine) minHeight else 320.dp
+    val text = textFieldState.text
+    var isFocused by remember { mutableStateOf(false) }
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
 
     Column(
         modifier = Modifier
@@ -455,7 +576,7 @@ private fun EditorField(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = label,
-                color = TextSecondary,
+                color = if (isNewYear && isFocused) activeAccent else TextSecondary,
                 fontSize = 13.sp,
             )
             if (isRequired) {
@@ -472,27 +593,47 @@ private fun EditorField(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Surface.copy(alpha = 0.6f))
+                .background(
+                    if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.78f)
+                    else Surface.copy(alpha = 0.6f),
+                )
+                .then(
+                    if (isNewYear) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = if (isFocused) {
+                                Color(0xFF67E8F9).copy(alpha = 0.65f)
+                            } else {
+                                Color(0xFF38BDF8).copy(alpha = 0.18f)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
-            if (value.isEmpty()) {
+            if (text.isEmpty()) {
                 Text(
                     text = placeholder,
                     color = TextSecondary.copy(alpha = 0.5f),
                     fontSize = 14.sp,
                 )
             }
+
             BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = singleLine,
+                state = textFieldState,
+                lineLimits = if (singleLine) TextFieldLineLimits.SingleLine
+                else TextFieldLineLimits.Default,
                 textStyle = TextStyle(
                     color = TextPrimary,
                     fontSize = 14.sp,
                 ),
-                cursorBrush = SolidColor(Accent),
+                cursorBrush = SolidColor(activeAccent),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .onFocusChanged { isFocused = it.isFocused }
                     .then(
                         if (!singleLine) Modifier.heightIn(min = minHeight, max = maxHeight)
                         else Modifier
@@ -506,11 +647,12 @@ private fun EditorField(
 private fun TagsSection(
     allTags: List<String>,
     selectedTags: Set<String>,
-    newTagDraft: String,
+    newTagField: TextFieldState,
     onTagClick: (String) -> Unit,
-    onNewTagChange: (String) -> Unit,
     onAddNewTag: () -> Unit,
+    isNewYear: Boolean = false,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     val popularNotRequired = POPULAR_TAGS.filter { it !in REQUIRED_TAGS }
     val dynamicTags = allTags
         .map { it.lowercase() }
@@ -543,7 +685,7 @@ private fun TagsSection(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = "(обязательно выбери хотя бы один)",
-                color = Accent.copy(alpha = 0.7f),
+                color = activeAccent.copy(alpha = 0.7f),
                 fontSize = 11.sp,
             )
         }
@@ -556,6 +698,7 @@ private fun TagsSection(
                 TagChipEditor(
                     label = tag,
                     isSelected = tag in selectedTags,
+                    isNewYear = isNewYear,
                     onClick = { onTagClick(tag) },
                 )
             }
@@ -582,6 +725,7 @@ private fun TagsSection(
                     TagChipEditor(
                         label = tag,
                         isSelected = tag in selectedTags,
+                        isNewYear = isNewYear,
                         onClick = { onTagClick(tag) },
                     )
                 }
@@ -599,10 +743,24 @@ private fun TagsSection(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Surface.copy(alpha = 0.6f))
+                    .background(
+                        if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.78f)
+                        else Surface.copy(alpha = 0.6f),
+                    )
+                    .then(
+                        if (isNewYear) {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = Color(0xFF38BDF8).copy(alpha = 0.18f),
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
-                if (newTagDraft.isEmpty()) {
+                if (newTagField.text.isEmpty()) {
                     Text(
                         text = "Новый тег...",
                         color = TextSecondary.copy(alpha = 0.5f),
@@ -610,11 +768,10 @@ private fun TagsSection(
                     )
                 }
                 BasicTextField(
-                    value = newTagDraft,
-                    onValueChange = onNewTagChange,
-                    singleLine = true,
+                    state = newTagField,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                     textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                    cursorBrush = SolidColor(Accent),
+                    cursorBrush = SolidColor(activeAccent),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -622,12 +779,17 @@ private fun TagsSection(
             Box(
                 modifier = Modifier
                     .size(40.dp)
+                    .festiveTapBurst(enabled = isNewYear, cornerRadius = 20.dp)
                     .clip(CircleShape)
-                    .background(Accent)
+                    .background(activeAccent)
                     .clickable(onClick = onAddNewTag),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(text = "+", color = Background, fontSize = 20.sp)
+                Text(
+                    text = "+",
+                    color = if (isNewYear) Color(0xFF060F1B) else Background,
+                    fontSize = 20.sp,
+                )
             }
         }
     }
@@ -637,18 +799,35 @@ private fun TagsSection(
 private fun TagChipEditor(
     label: String,
     isSelected: Boolean,
+    isNewYear: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Box(
         modifier = Modifier
+            .festiveTapBurst(enabled = isNewYear, cornerRadius = 20.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) Accent else SurfaceVariant)
+            .background(
+                when {
+                    isSelected -> activeAccent
+                    isNewYear -> Color(0xFF0C1C2E).copy(alpha = 0.85f)
+                    else -> SurfaceVariant
+                },
+            )
+            .arcticGlassCard(
+                enabled = isNewYear && !isSelected,
+                cornerRadius = 20.dp,
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
         Text(
             text = label,
-            color = if (isSelected) Background else TextPrimary,
+            color = if (isSelected) {
+                if (isNewYear) Color(0xFF060F1B) else Background
+            } else {
+                TextPrimary
+            },
             fontSize = 13.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
         )
@@ -662,7 +841,9 @@ private fun IngredientsSection(
     onRemove: (Long) -> Unit,
     onNameChange: (Long, String) -> Unit,
     onQuantityChange: (Long, String) -> Unit,
+    isNewYear: Boolean = false,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -689,6 +870,7 @@ private fun IngredientsSection(
         ingredients.forEach { ingredient ->
             IngredientRow(
                 ingredient = ingredient,
+                isNewYear = isNewYear,
                 onNameChange = { text -> onNameChange(ingredient.id, text) },
                 onQuantityChange = { text -> onQuantityChange(ingredient.id, text) },
                 onRemove = { onRemove(ingredient.id) },
@@ -706,11 +888,11 @@ private fun IngredientsSection(
                 .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = "+", color = Accent, fontSize = 18.sp)
+            Text(text = "+", color = activeAccent, fontSize = 18.sp)
             Spacer(Modifier.width(6.dp))
             Text(
                 text = "Добавить ингредиент",
-                color = Accent,
+                color = activeAccent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -721,10 +903,15 @@ private fun IngredientsSection(
 @Composable
 private fun IngredientRow(
     ingredient: IngredientDraft,
+    isNewYear: Boolean = false,
     onNameChange: (String) -> Unit,
     onQuantityChange: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
+    val fieldBg = if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.78f) else Surface.copy(alpha = 0.6f)
+    val fieldBorder = if (isNewYear) Color(0xFF38BDF8).copy(alpha = 0.18f) else Color.Transparent
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -735,7 +922,11 @@ private fun IngredientRow(
             modifier = Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Surface.copy(alpha = 0.6f))
+                .background(fieldBg)
+                .then(
+                    if (isNewYear) Modifier.border(1.dp, fieldBorder, RoundedCornerShape(10.dp))
+                    else Modifier,
+                )
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             if (ingredient.name.isEmpty()) {
@@ -750,7 +941,7 @@ private fun IngredientRow(
                 onValueChange = onNameChange,
                 singleLine = true,
                 textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                cursorBrush = SolidColor(Accent),
+                cursorBrush = SolidColor(activeAccent),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -761,7 +952,11 @@ private fun IngredientRow(
             modifier = Modifier
                 .width(90.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Surface.copy(alpha = 0.6f))
+                .background(fieldBg)
+                .then(
+                    if (isNewYear) Modifier.border(1.dp, fieldBorder, RoundedCornerShape(10.dp))
+                    else Modifier,
+                )
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             if (ingredient.quantity.isEmpty()) {
@@ -776,7 +971,7 @@ private fun IngredientRow(
                 onValueChange = onQuantityChange,
                 singleLine = true,
                 textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                cursorBrush = SolidColor(Accent),
+                cursorBrush = SolidColor(activeAccent),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -806,7 +1001,10 @@ private fun StepsSection(
     onTextChange: (Long, String) -> Unit,
     onPhotoClick: (Long) -> Unit,
     onPhotoRemove: (Long) -> Unit,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -838,6 +1036,8 @@ private fun StepsSection(
                 isMoving = step.id == movingStepId,
                 isFirst = index == 0,
                 isLast = index == steps.size - 1,
+                isNewYear = isNewYear,
+                lightPhase = lightPhase,
                 onMoveUp = { onMoveUp(step.id) },
                 onMoveDown = { onMoveDown(step.id) },
                 onTextChange = { text -> onTextChange(step.id, text) },
@@ -858,11 +1058,11 @@ private fun StepsSection(
                 .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = "+", color = Accent, fontSize = 18.sp)
+            Text(text = "+", color = activeAccent, fontSize = 18.sp)
             Spacer(Modifier.width(6.dp))
             Text(
                 text = "Добавить шаг",
-                color = Accent,
+                color = activeAccent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -877,6 +1077,8 @@ private fun StepRow(
     isMoving: Boolean,
     isFirst: Boolean,
     isLast: Boolean,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onTextChange: (String) -> Unit,
@@ -884,6 +1086,7 @@ private fun StepRow(
     onPhotoClick: () -> Unit,
     onPhotoRemove: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     val scale by animateFloatAsState(
         targetValue = if (isMoving) 1.02f else 1f,
         animationSpec = tween(150)
@@ -913,12 +1116,25 @@ private fun StepRow(
                 modifier = Modifier
                     .size(28.dp)
                     .clip(CircleShape)
-                    .background(Accent),
+                    .then(
+                        if (isNewYear) {
+                            Modifier.background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFF67E8F9),
+                                        Color(0xFF818CF8),
+                                    ),
+                                ),
+                            )
+                        } else {
+                            Modifier.background(Accent)
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = "$number",
-                    color = Background,
+                    color = if (isNewYear) Color(0xFF060F1B) else Background,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -928,6 +1144,7 @@ private fun StepRow(
                 AnimatedIconButton(
                     icon = Icons.Default.KeyboardArrowUp,
                     contentDescription = "Вверх",
+                    isNewYear = isNewYear,
                     onClick = onMoveUp
                 )
             }
@@ -935,6 +1152,7 @@ private fun StepRow(
                 AnimatedIconButton(
                     icon = Icons.Default.KeyboardArrowDown,
                     contentDescription = "Вниз",
+                    isNewYear = isNewYear,
                     onClick = onMoveDown
                 )
             }
@@ -947,7 +1165,21 @@ private fun StepRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Surface.copy(alpha = 0.6f))
+                    .background(
+                        if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.78f)
+                        else Surface.copy(alpha = 0.6f),
+                    )
+                    .then(
+                        if (isNewYear) {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = Color(0xFF38BDF8).copy(alpha = 0.18f),
+                                shape = RoundedCornerShape(10.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 if (step.text.isEmpty()) {
@@ -966,7 +1198,7 @@ private fun StepRow(
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                     ),
-                    cursorBrush = SolidColor(Accent),
+                    cursorBrush = SolidColor(activeAccent),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 60.dp, max = 240.dp),
@@ -978,6 +1210,8 @@ private fun StepRow(
             StepPhotoBlock(
                 photoUri = step.photoUri,
                 photoBytes = step.photoBytes,
+                isNewYear = isNewYear,
+                lightPhase = lightPhase,
                 onClick = onPhotoClick,
                 onRemove = onPhotoRemove,
             )
@@ -988,6 +1222,7 @@ private fun StepRow(
         AnimatedIconButton(
             icon = Icons.Default.Close,
             contentDescription = "Удалить",
+            isNewYear = isNewYear,
             onClick = onRemove,
             isDanger = true
         )
@@ -999,14 +1234,16 @@ private fun AnimatedIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    isNewYear: Boolean = false,
     isDanger: Boolean = false
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val tint = when {
         isPressed && isDanger -> Error
-        isPressed -> Accent
+        isPressed -> activeAccent
         else -> TextSecondary
     }
 
@@ -1029,9 +1266,12 @@ private fun AnimatedIconButton(
 private fun StepPhotoBlock(
     photoUri: String?,
     photoBytes: ByteArray?,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     val bitmap = remember(photoBytes) {
         photoBytes?.let { bytesToImageBitmap(it) }
     }
@@ -1045,6 +1285,12 @@ private fun StepPhotoBlock(
                         .fillMaxWidth()
                         .height(225.dp)
                         .clip(RoundedCornerShape(12.dp))
+                        .winterRecipeCard(
+                            enabled = isNewYear,
+                            style = WinterCardStyle.Medium,
+                            cornerRadius = 12.dp,
+                            highlightPhase = lightPhase,
+                        )
                         .clickable(onClick = onClick),
                 ) {
                     when {
@@ -1093,17 +1339,24 @@ private fun StepPhotoBlock(
                     .fillMaxWidth()
                     .height(50.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Surface.copy(alpha = 0.6f))
+                    .background(
+                        if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.72f)
+                        else Surface.copy(alpha = 0.6f),
+                    )
                     .border(
                         width = 1.dp,
-                        color = TextSecondary.copy(alpha = 0.2f),
+                        color = if (isNewYear) {
+                            Color(0xFF38BDF8).copy(alpha = 0.18f)
+                        } else {
+                            TextSecondary.copy(alpha = 0.2f)
+                        },
                         shape = RoundedCornerShape(10.dp),
                     )
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "+", color = Accent, fontSize = 18.sp)
+                    Text(text = "+", color = activeAccent, fontSize = 18.sp)
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "Добавить фото к шагу",
@@ -1118,14 +1371,15 @@ private fun StepPhotoBlock(
 
 @Composable
 private fun MusicSection(
-    note: String,
+    musicNoteField: TextFieldState,
     tracks: List<MusicTrackDraft>,
-    onNoteChange: (String) -> Unit,
     onAddTrack: () -> Unit,
     onRemoveTrack: (Long) -> Unit,
     onTrackTitleChange: (Long, String) -> Unit,
     onTrackUrlChange: (Long, String) -> Unit,
+    isNewYear: Boolean = false,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1139,19 +1393,52 @@ private fun MusicSection(
         )
         Spacer(Modifier.height(8.dp))
 
-        MusicField(
-            placeholder = "Посоветуй музыку для готовки...",
-            value = note,
-            onValueChange = onNoteChange,
-            singleLine = false,
-            minHeight = 80.dp,
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.78f)
+                    else Surface.copy(alpha = 0.6f),
+                )
+                .then(
+                    if (isNewYear) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = Color(0xFF38BDF8).copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            if (musicNoteField.text.isEmpty()) {
+                Text(
+                    text = "Посоветуй музыку для готовки...",
+                    color = TextSecondary.copy(alpha = 0.5f),
+                    fontSize = 13.sp,
+                )
+            }
+
+            BasicTextField(
+                state = musicNoteField,
+                textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp, lineHeight = 18.sp),
+                cursorBrush = SolidColor(activeAccent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 80.dp, max = 220.dp),
+            )
+        }
 
         Spacer(Modifier.height(12.dp))
 
         tracks.forEach { track ->
             MusicTrackRow(
                 track = track,
+                isNewYear = isNewYear,
                 onTitleChange = { text -> onTrackTitleChange(track.id, text) },
                 onUrlChange = { text -> onTrackUrlChange(track.id, text) },
                 onRemove = { onRemoveTrack(track.id) },
@@ -1168,11 +1455,11 @@ private fun MusicSection(
                 .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = "+", color = Accent, fontSize = 18.sp)
+            Text(text = "+", color = activeAccent, fontSize = 18.sp)
             Spacer(Modifier.width(6.dp))
             Text(
                 text = "Добавить трек",
-                color = Accent,
+                color = activeAccent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -1181,57 +1468,17 @@ private fun MusicSection(
 }
 
 @Composable
-private fun MusicField(
-    placeholder: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    singleLine: Boolean,
-    minHeight: androidx.compose.ui.unit.Dp = 48.dp,
-) {
-    val maxHeight = if (singleLine) minHeight else 220.dp
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Surface.copy(alpha = 0.6f))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        if (value.isEmpty()) {
-            Text(
-                text = placeholder,
-                color = TextSecondary.copy(alpha = 0.5f),
-                fontSize = 13.sp,
-            )
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = singleLine,
-            textStyle = TextStyle(
-                color = TextPrimary,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-            ),
-            cursorBrush = SolidColor(Accent),
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (!singleLine) Modifier.heightIn(min = minHeight, max = maxHeight)
-                    else Modifier
-                ),
-        )
-    }
-}
-
-@Composable
 private fun MusicTrackRow(
     track: MusicTrackDraft,
+    isNewYear: Boolean = false,
     onTitleChange: (String) -> Unit,
     onUrlChange: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
+    val fieldBg = if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.78f) else Surface.copy(alpha = 0.6f)
+    val fieldBorder = if (isNewYear) Color(0xFF38BDF8).copy(alpha = 0.18f) else Color.Transparent
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1243,7 +1490,11 @@ private fun MusicTrackRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Surface.copy(alpha = 0.6f))
+                    .background(fieldBg)
+                    .then(
+                        if (isNewYear) Modifier.border(1.dp, fieldBorder, RoundedCornerShape(10.dp))
+                        else Modifier,
+                    )
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 if (track.title.isEmpty()) {
@@ -1258,7 +1509,7 @@ private fun MusicTrackRow(
                     onValueChange = onTitleChange,
                     singleLine = true,
                     textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                    cursorBrush = SolidColor(Accent),
+                    cursorBrush = SolidColor(activeAccent),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1267,7 +1518,11 @@ private fun MusicTrackRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Surface.copy(alpha = 0.6f))
+                    .background(fieldBg)
+                    .then(
+                        if (isNewYear) Modifier.border(1.dp, fieldBorder, RoundedCornerShape(10.dp))
+                        else Modifier,
+                    )
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 if (track.url.isEmpty()) {
@@ -1282,7 +1537,7 @@ private fun MusicTrackRow(
                     onValueChange = onUrlChange,
                     singleLine = true,
                     textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                    cursorBrush = SolidColor(Accent),
+                    cursorBrush = SolidColor(activeAccent),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1305,10 +1560,12 @@ private fun MusicTrackRow(
 @Composable
 private fun ExitConfirmDialog(
     isNewRecipe: Boolean,
+    isNewYear: Boolean = false,
     onCancel: () -> Unit,
     onSaveDraft: () -> Unit,
     onExitWithoutSaving: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1323,7 +1580,18 @@ private fun ExitConfirmDialog(
                 .padding(horizontal = 40.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(Background)
+                .background(if (isNewYear) Color(0xFF0C1C2E) else Background)
+                .then(
+                    if (isNewYear) {
+                        Modifier.border(
+                            1.dp,
+                            Color(0xFF67E8F9).copy(alpha = 0.28f),
+                            RoundedCornerShape(20.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
                 .clickable(enabled = false) { },
         ) {
             Column(
@@ -1389,7 +1657,7 @@ private fun ExitConfirmDialog(
                                 .height(44.dp)
                                 .graphicsLayer(scaleX = scale2, scaleY = scale2)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Accent)
+                                .background(activeAccent)
                                 .clickable(
                                     interactionSource = inter2,
                                     indication = null,
@@ -1397,7 +1665,12 @@ private fun ExitConfirmDialog(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("Сохранить", color = Background, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Сохранить",
+                                color = if (isNewYear) Color(0xFF060F1B) else Background,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                         }
                     }
                 }

@@ -24,6 +24,21 @@ data class NukaTheme(
     val isDark: Boolean,
 )
 
+/**
+ * Дополнительные праздничные оттенки для световых бликов, фасок и акцентов очага.
+ */
+object WinterPalette {
+    val MidnightBase = Color(0xFF060F1B)
+    val MidnightElevated = Color(0xFF0C1C2E)
+    val CryoSlate = Color(0xFF132942)
+    val GlacialCyan = Color(0xFF67E8F9)
+    val FrostHighlight = Color(0xFFE0F2FE)
+    val IceBlue = Color(0xFFBAE6FD)
+    val ChampagneGold = Color(0xFFFDE68A)
+    val HearthAmber = Color(0xFFF59E0B)
+    val BerryGlow = Color(0xFFFF5C77)
+}
+
 val DefaultTheme = NukaTheme(
     id = "default",
     displayName = "Default",
@@ -75,11 +90,30 @@ val CreamGardenTheme = NukaTheme(
     isDark = false,
 )
 
-val HalloweenThemePlaceholder = NukaTheme(
-    id = "halloween",
-    displayName = "Halloween",
-    colors = DefaultTheme.colors,
+val NewYearTheme = NukaTheme(
+    id = "new_year",
+    displayName = "New Year",
+    colors = NukaColors(
+        accent = Color(0xFF67E8F9),
+        accentSoft = Color(0x2E67E8F9),
+        background = Color(0xFF060F1B),
+        surface = Color(0xFF0C1C2E),
+        surfaceVariant = Color(0xFF132942),
+        textPrimary = Color(0xFFF4F9FF),
+        textSecondary = Color(0xFF93B4D4),
+        divider = Color(0xFF1D3856),
+        error = Color(0xFFFF5C77),
+    ),
     isDark = true,
 )
 
-val AllThemes = listOf(DefaultTheme, FalloutTheme, CreamGardenTheme, HalloweenThemePlaceholder)
+val AllThemes = listOf(
+    DefaultTheme,
+    FalloutTheme,
+    CreamGardenTheme,
+    NewYearTheme,
+)
+
+fun getThemeById(id: String): NukaTheme {
+    return AllThemes.firstOrNull { it.id == id } ?: DefaultTheme
+}

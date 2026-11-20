@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,7 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.appa.recipeapp.data.model.Recipe
-import com.appa.recipeapp.ui.theme.Accent
+import com.appa.recipeapp.ui.theme.NewYearTheme
 import com.appa.recipeapp.ui.theme.TextPrimary
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
@@ -38,11 +39,15 @@ fun RecipeCardMedium(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val accent = MaterialTheme.colorScheme.primary
+    val isNewYear = accent == NewYearTheme.colors.accent
+
     Box(
         modifier = modifier
             .width(150.dp)
             .height(187.dp)
             .clip(RoundedCornerShape(16.dp))
+            .frostCard(enabled = isNewYear, cornerRadius = 16.dp)
             .clickable(onClick = onClick),
     ) {
         RecipeImage(
@@ -80,7 +85,7 @@ fun RecipeCardMedium(
             Spacer(Modifier.width(3.dp))
             Text(
                 text = recipe.authorName,
-                color = Accent,
+                color = accent,
                 fontSize = 10.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -96,13 +101,13 @@ fun RecipeCardMedium(
                 Icon(
                     painter = painterResource(Res.drawable.ic_timer),
                     contentDescription = null,
-                    tint = Accent,
+                    tint = accent,
                     modifier = Modifier.size(11.dp),
                 )
                 Spacer(Modifier.width(3.dp))
                 Text(
                     text = "${recipe.cookingTimeMinutes} мин",
-                    color = Accent,
+                    color = accent,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                 )

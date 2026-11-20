@@ -1,13 +1,21 @@
 package com.appa.recipeapp.presentation.detail
 
-import coil3.compose.AsyncImage
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,59 +27,74 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
-import com.appa.recipeapp.platform.openExternalUrl
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import com.appa.recipeapp.data.model.Comment
 import com.appa.recipeapp.data.model.Rating
 import com.appa.recipeapp.data.model.Recipe
+import com.appa.recipeapp.platform.openExternalUrl
+import com.appa.recipeapp.ui.components.AuthorAvatar
+import com.appa.recipeapp.ui.components.InteractiveSnowfallLayer
 import com.appa.recipeapp.ui.components.PlaceholderImage
+import com.appa.recipeapp.ui.components.SkeletonDetailContent
+import com.appa.recipeapp.ui.components.WinterCardStyle
+import com.appa.recipeapp.ui.components.WinterConservatoryBackdrop
+import com.appa.recipeapp.ui.components.arcticGlassCard
+import com.appa.recipeapp.ui.components.festiveTapBurst
+import com.appa.recipeapp.ui.components.observeSnowPointer
+import com.appa.recipeapp.ui.components.rememberSnowSimulationState
+import com.appa.recipeapp.ui.components.winterRecipeCard
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
 import com.appa.recipeapp.ui.theme.DividerColor
+import com.appa.recipeapp.ui.theme.Error
+import com.appa.recipeapp.ui.theme.NewYearTheme
 import com.appa.recipeapp.ui.theme.Surface
 import com.appa.recipeapp.ui.theme.SurfaceVariant
 import com.appa.recipeapp.ui.theme.TextPrimary
 import com.appa.recipeapp.ui.theme.TextSecondary
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import com.appa.recipeapp.ui.components.SkeletonDetailContent
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
+import recipeapp.shared.generated.resources.ic_calendar
 import recipeapp.shared.generated.resources.ic_timer
 import recipeapp.shared.generated.resources.nuka_cap
-import com.appa.recipeapp.ui.components.AuthorAvatar
-import com.appa.recipeapp.data.model.Comment
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.PointerId
-import androidx.compose.ui.input.pointer.pointerInput
-import com.appa.recipeapp.ui.theme.Error
-import androidx.compose.material.icons.filled.Close
+import kotlin.math.PI
+
 @Composable
 fun DetailScreen(
     viewModel: DetailViewModel,
@@ -79,6 +102,25 @@ fun DetailScreen(
     onEditClick: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isNewYear = MaterialTheme.colorScheme.primary == NewYearTheme.colors.accent
+
+    val listState = rememberLazyListState()
+    val scrollParallax by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex * 28f + listState.firstVisibleItemScrollOffset * 0.10f
+        }
+    }
+    val snowState = rememberSnowSimulationState(flakeCount = 28)
+    val winterTransition = rememberInfiniteTransition(label = "winter_detail_loop")
+    val lightPhase by winterTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 6000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "detail_light_phase",
+    )
 
     when {
         state.isLoading -> {
@@ -86,7 +128,9 @@ fun DetailScreen(
         }
         state.recipe == null -> {
             Box(
-                modifier = Modifier.fillMaxSize().background(Background),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (isNewYear) Color(0xFF060F1B) else Background),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -99,81 +143,145 @@ fun DetailScreen(
         else -> {
             val recipe = state.recipe!!
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 32.dp),
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (isNewYear) {
+                            Modifier
+                                .background(Color(0xFF060F1B))
+                                .observeSnowPointer(snowState = snowState, enabled = true)
+                        } else {
+                            Modifier
+                        },
+                    ),
             ) {
-                item {
-                    TopPhotoBlock(
-                        recipe = recipe,
-                        isMyRecipe = state.isMyRecipe,
-                        onBackClick = onBackClick,
-                        onEditClick = { onEditClick(recipe.id) },
-                        onFavoriteClick = { viewModel.toggleFavorite() },
+                if (isNewYear) {
+                    WinterConservatoryBackdrop(
+                        scrollParallax = scrollParallax,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // Снежинки плавно появляются ниже блока названия и описания, не перекрывая фото блюда
+                    InteractiveSnowfallLayer(
+                        snowState = snowState,
+                        topFadeStartFraction = 0.44f,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
 
-                item {
-                    TitleCard(recipe = recipe)
-                }
-
-                item {
-                    SectionBlock(title = "Ингредиенты") {
-                        IngredientsList(recipe)
-                    }
-                }
-
-                item {
-                    SectionBlock(title = "Приготовление") {
-                        StepsList(recipe)
-                    }
-                }
-
-                item {
-                    if (recipe.musicNote.isNotBlank() || recipe.musicTracks.isNotEmpty()) {
-                        SectionBlock(title = "Музыка для готовки") {
-                            MusicBlock(recipe)
-                        }
-                    } else {
-                        Spacer(Modifier.height(0.dp))
-                    }
-                }
-
-                if (recipe.notes.isNotBlank()) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                ) {
                     item {
-                        SectionBlock(title = "Заметки") {
-                            Text(
-                                text = recipe.notes,
-                                color = TextSecondary,
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
+                        TopPhotoBlock(
+                            recipe = recipe,
+                            isMyRecipe = state.isMyRecipe,
+                            isNewYear = isNewYear,
+                            lightPhase = lightPhase,
+                            onBackClick = onBackClick,
+                            onEditClick = { onEditClick(recipe.id) },
+                            onFavoriteClick = { viewModel.toggleFavorite() },
+                        )
+                    }
+
+                    item {
+                        TitleCard(
+                            recipe = recipe,
+                            isNewYear = isNewYear,
+                            lightPhase = lightPhase,
+                        )
+                    }
+
+                    item {
+                        SectionBlock(
+                            title = "Ингредиенты",
+                            isNewYear = isNewYear,
+                        ) {
+                            IngredientsList(recipe = recipe, isNewYear = isNewYear)
+                        }
+                    }
+
+                    item {
+                        SectionBlock(
+                            title = "Приготовление",
+                            isNewYear = isNewYear,
+                        ) {
+                            StepsList(
+                                recipe = recipe,
+                                isNewYear = isNewYear,
+                                lightPhase = lightPhase,
                             )
                         }
                     }
-                }
 
-                item {
-                    SectionBlock(title = "Оценки", showDivider = true) {
-                        RatingsBlock(
-                            ratings = state.ratings,
-                            draftStars = state.draftStars,
-                            onStarsChange = viewModel::onStarsChange,
-                            onSubmit = viewModel::submitRating,
-                            onDeleteMyRating = viewModel::deleteMyRating,
-                        )
+                    item {
+                        if (recipe.musicNote.isNotBlank() || recipe.musicTracks.isNotEmpty()) {
+                            SectionBlock(
+                                title = "Музыка для готовки",
+                                isNewYear = isNewYear,
+                            ) {
+                                MusicBlock(
+                                    recipe = recipe,
+                                    isNewYear = isNewYear,
+                                    lightPhase = lightPhase,
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.height(0.dp))
+                        }
                     }
-                }
 
-                item {
-                    SectionBlock(title = "Комментарии", showDivider = false) {
-                        CommentsBlock(
-                            comments = state.comments,
-                            draftComment = state.draftComment,
-                            onCommentChange = viewModel::onCommentChange,
-                            onSubmit = viewModel::submitComment,
-                            currentUserId = state.currentUserID,
-                            onDeleteComment = viewModel::deleteComment,
-                        )
+                    if (recipe.notes.isNotBlank()) {
+                        item {
+                            SectionBlock(
+                                title = "Заметки",
+                                isNewYear = isNewYear,
+                            ) {
+                                Text(
+                                    text = recipe.notes,
+                                    color = TextSecondary,
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        SectionBlock(
+                            title = "Оценки",
+                            showDivider = true,
+                            isNewYear = isNewYear,
+                        ) {
+                            RatingsBlock(
+                                ratings = state.ratings,
+                                draftStars = state.draftStars,
+                                isNewYear = isNewYear,
+                                onStarsChange = viewModel::onStarsChange,
+                                onSubmit = viewModel::submitRating,
+                                onDeleteMyRating = viewModel::deleteMyRating,
+                            )
+                        }
+                    }
+
+                    item {
+                        SectionBlock(
+                            title = "Комментарии",
+                            showDivider = false,
+                            isNewYear = isNewYear,
+                        ) {
+                            CommentsBlock(
+                                comments = state.comments,
+                                draftComment = state.draftComment,
+                                isNewYear = isNewYear,
+                                onCommentChange = viewModel::onCommentChange,
+                                onSubmit = viewModel::submitComment,
+                                currentUserId = state.currentUserID,
+                                onDeleteComment = viewModel::deleteComment,
+                            )
+                        }
                     }
                 }
             }
@@ -185,10 +293,13 @@ fun DetailScreen(
 private fun TopPhotoBlock(
     recipe: Recipe,
     isMyRecipe: Boolean,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
     onBackClick: () -> Unit,
     onEditClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -209,10 +320,30 @@ private fun TopPhotoBlock(
             )
         }
 
+        // Лёгкий плавный переход самой нижней кромки фото в фон карточки названия
+        if (isNewYear) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0xFF060F1B).copy(alpha = 0.75f),
+                            ),
+                        ),
+                    ),
+            )
+        }
+
         CircleButton(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(16.dp),
+            isNewYear = isNewYear,
+            lightPhase = lightPhase,
             onClick = onBackClick,
         ) {
             Icon(
@@ -230,7 +361,11 @@ private fun TopPhotoBlock(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (isMyRecipe) {
-                CircleButton(onClick = onEditClick) {
+                CircleButton(
+                    isNewYear = isNewYear,
+                    lightPhase = lightPhase,
+                    onClick = onEditClick,
+                ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "Редактировать",
@@ -240,11 +375,16 @@ private fun TopPhotoBlock(
                 }
             }
 
-            CircleButton(onClick = onFavoriteClick) {
+            CircleButton(
+                isNewYear = isNewYear,
+                lightPhase = lightPhase,
+                isHighlighted = isNewYear && recipe.isFavorite,
+                onClick = onFavoriteClick,
+            ) {
                 Icon(
                     imageVector = Icons.Default.Favorite,
                     contentDescription = "В избранное",
-                    tint = if (recipe.isFavorite) Accent else TextPrimary,
+                    tint = if (recipe.isFavorite) activeAccent else TextPrimary,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -254,15 +394,53 @@ private fun TopPhotoBlock(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TitleCard(recipe: Recipe) {
+private fun TitleCard(
+    recipe: Recipe,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
+) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .offset(y = (-32).dp)
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(Background)
+            .then(
+                if (isNewYear) {
+                    Modifier.background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF0A1930),
+                                Color(0xFF071222).copy(alpha = 0.94f),
+                                Color.Transparent,
+                            ),
+                        ),
+                    )
+                } else {
+                    Modifier.background(Background)
+                },
+            )
             .padding(horizontal = 20.dp, vertical = 20.dp),
     ) {
+        if (isNewYear) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp)
+                    .height(1.dp)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0xFF67E8F9).copy(alpha = 0.45f),
+                                Color(0xFF818CF8).copy(alpha = 0.35f),
+                                Color.Transparent,
+                            ),
+                        ),
+                    ),
+            )
+        }
+
         Text(
             text = recipe.title,
             color = TextPrimary,
@@ -272,7 +450,9 @@ private fun TitleCard(recipe: Recipe) {
 
         Spacer(Modifier.height(12.dp))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Image(
                 painter = painterResource(Res.drawable.nuka_cap),
                 contentDescription = null,
@@ -281,7 +461,7 @@ private fun TitleCard(recipe: Recipe) {
             Spacer(Modifier.width(4.dp))
             Text(
                 text = formatRating(recipe),
-                color = TextPrimary,
+                color = if (isNewYear) activeAccent else TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -305,12 +485,29 @@ private fun TitleCard(recipe: Recipe) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_timer),
                     contentDescription = null,
-                    tint = TextSecondary,
+                    tint = if (isNewYear) Color(0xFF67E8F9).copy(alpha = 0.85f) else TextSecondary,
                     modifier = Modifier.size(14.dp),
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
                     text = "${recipe.cookingTimeMinutes} мин",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                )
+            }
+
+            MetricDivider()
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_calendar),
+                    contentDescription = null,
+                    tint = if (isNewYear) Color(0xFF67E8F9).copy(alpha = 0.85f) else TextSecondary,
+                    modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = formatDate(recipe.createdAt),
                     color = TextSecondary,
                     fontSize = 13.sp,
                 )
@@ -328,12 +525,20 @@ private fun TitleCard(recipe: Recipe) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Surface)
+                            .background(
+                                if (isNewYear) Color(0xFF0E213A).copy(alpha = 0.85f)
+                                else Surface,
+                            )
+                            .arcticGlassCard(
+                                enabled = isNewYear,
+                                cornerRadius = 8.dp,
+                                highlightPhase = lightPhase,
+                            )
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     ) {
                         Text(
                             text = tag,
-                            color = TextSecondary,
+                            color = if (isNewYear) Color(0xFFBAE6FD) else TextSecondary,
                             fontSize = 11.sp,
                         )
                     }
@@ -357,6 +562,7 @@ private fun TitleCard(recipe: Recipe) {
 private fun SectionBlock(
     title: String,
     showDivider: Boolean = true,
+    isNewYear: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Column(
@@ -375,18 +581,41 @@ private fun SectionBlock(
         content()
         if (showDivider) {
             Spacer(Modifier.height(24.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(DividerColor.copy(alpha = 0.5f)),
-            )
+            if (isNewYear) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color(0xFF38BDF8).copy(alpha = 0.24f),
+                                    Color(0xFF818CF8).copy(alpha = 0.28f),
+                                    Color(0xFF38BDF8).copy(alpha = 0.24f),
+                                    Color.Transparent,
+                                ),
+                            ),
+                        ),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(DividerColor.copy(alpha = 0.5f)),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun IngredientsList(recipe: Recipe) {
+private fun IngredientsList(
+    recipe: Recipe,
+    isNewYear: Boolean = false,
+) {
+    val dotColor = if (isNewYear) Color(0xFF67E8F9).copy(alpha = 0.35f) else Color(0xFF9E9E9E).copy(alpha = 0.4f)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         recipe.ingredients.forEach { ingredient ->
             Row(
@@ -410,7 +639,7 @@ private fun IngredientsList(recipe: Recipe) {
                             var x = 0f
                             while (x < size.width) {
                                 drawCircle(
-                                    color = Color(0xFF9E9E9E).copy(alpha = 0.4f),
+                                    color = dotColor,
                                     radius = dotRadius,
                                     center = Offset(x + dotRadius, y),
                                 )
@@ -420,7 +649,7 @@ private fun IngredientsList(recipe: Recipe) {
                 )
                 Text(
                     text = "${ingredient.amount} ${ingredient.unit}".trim(),
-                    color = TextSecondary,
+                    color = if (isNewYear) Color(0xFFBAE6FD) else TextSecondary,
                     fontSize = 14.sp,
                 )
             }
@@ -429,7 +658,11 @@ private fun IngredientsList(recipe: Recipe) {
 }
 
 @Composable
-private fun StepsList(recipe: Recipe) {
+private fun StepsList(
+    recipe: Recipe,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         recipe.steps.forEachIndexed { index, step ->
             Column {
@@ -441,12 +674,25 @@ private fun StepsList(recipe: Recipe) {
                         modifier = Modifier
                             .size(26.dp)
                             .clip(CircleShape)
-                            .background(Accent),
+                            .then(
+                                if (isNewYear) {
+                                    Modifier.background(
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(
+                                                Color(0xFF67E8F9),
+                                                Color(0xFF818CF8),
+                                            ),
+                                        ),
+                                    )
+                                } else {
+                                    Modifier.background(Accent)
+                                },
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = "${index + 1}",
-                            color = Background,
+                            color = if (isNewYear) Color(0xFF060F1B) else Background,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -460,7 +706,13 @@ private fun StepsList(recipe: Recipe) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(225.dp)
-                                    .clip(RoundedCornerShape(12.dp)),
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .winterRecipeCard(
+                                        enabled = isNewYear,
+                                        style = WinterCardStyle.Medium,
+                                        cornerRadius = 12.dp,
+                                        highlightPhase = lightPhase,
+                                    ),
                             ) {
                                 AsyncImage(
                                     model = step.photoUrl,
@@ -488,7 +740,10 @@ private fun StepsList(recipe: Recipe) {
                             .fillMaxWidth()
                             .padding(start = 38.dp)
                             .height(1.dp)
-                            .background(DividerColor.copy(alpha = 0.3f)),
+                            .background(
+                                if (isNewYear) Color(0xFF38BDF8).copy(alpha = 0.16f)
+                                else DividerColor.copy(alpha = 0.3f),
+                            ),
                     )
                 }
             }
@@ -497,7 +752,12 @@ private fun StepsList(recipe: Recipe) {
 }
 
 @Composable
-private fun MusicBlock(recipe: Recipe) {
+private fun MusicBlock(
+    recipe: Recipe,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
+) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Column {
         if (recipe.musicNote.isNotBlank()) {
             Text(
@@ -515,8 +775,17 @@ private fun MusicBlock(recipe: Recipe) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .festiveTapBurst(enabled = isNewYear, cornerRadius = 12.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Surface)
+                        .background(
+                            if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.82f)
+                            else Surface,
+                        )
+                        .arcticGlassCard(
+                            enabled = isNewYear,
+                            cornerRadius = 12.dp,
+                            highlightPhase = lightPhase,
+                        )
                         .clickable {
                             if (track.url.isNotBlank()) {
                                 openExternalUrl(track.url)
@@ -539,7 +808,9 @@ private fun MusicBlock(recipe: Recipe) {
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceVariant),
+                                .background(
+                                    if (isNewYear) Color(0xFF132942) else SurfaceVariant,
+                                ),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(text = "🎵", fontSize = 22.sp)
@@ -556,7 +827,7 @@ private fun MusicBlock(recipe: Recipe) {
                         val source = com.appa.recipeapp.utils.MusicSourceDetector.detect(track.url)
                         Text(
                             text = "${source.displayName} →",
-                            color = Accent,
+                            color = activeAccent,
                             fontSize = 12.sp,
                         )
                     }
@@ -570,10 +841,12 @@ private fun MusicBlock(recipe: Recipe) {
 private fun RatingsBlock(
     ratings: List<Rating>,
     draftStars: Int,
+    isNewYear: Boolean = false,
     onStarsChange: (Int) -> Unit,
     onSubmit: () -> Unit,
     onDeleteMyRating: () -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Column {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             repeat(5) { index ->
@@ -603,12 +876,13 @@ private fun RatingsBlock(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
                     modifier = Modifier
+                        .festiveTapBurst(enabled = isNewYear, cornerRadius = 8.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Accent.copy(alpha = 0.2f))
+                        .background(activeAccent.copy(alpha = 0.2f))
                         .clickable { onSubmit() }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
-                    Text("Оценить", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Оценить", color = activeAccent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 Box(
@@ -667,17 +941,33 @@ private fun RatingsBlock(
 private fun CommentsBlock(
     comments: List<Comment>,
     draftComment: String,
+    isNewYear: Boolean = false,
     onCommentChange: (String) -> Unit,
     onSubmit: () -> Unit,
     currentUserId: String,
     onDeleteComment: (String) -> Unit,
 ) {
+    val activeAccent = if (isNewYear) NewYearTheme.colors.accent else Accent
     Column {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
+                .background(
+                    if (isNewYear) Color(0xFF0B1A2E).copy(alpha = 0.82f)
+                    else Surface,
+                )
+                .then(
+                    if (isNewYear) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = Color(0xFF38BDF8).copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
                 .padding(14.dp),
         ) {
             if (draftComment.isEmpty()) {
@@ -687,7 +977,7 @@ private fun CommentsBlock(
                 value = draftComment,
                 onValueChange = onCommentChange,
                 textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
-                cursorBrush = SolidColor(Accent),
+                cursorBrush = SolidColor(activeAccent),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -697,14 +987,22 @@ private fun CommentsBlock(
         Box(
             modifier = Modifier
                 .align(Alignment.End)
+                .festiveTapBurst(enabled = isNewYear && draftComment.isNotBlank(), cornerRadius = 10.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (draftComment.isNotBlank()) Accent else SurfaceVariant)
+                .background(
+                    if (draftComment.isNotBlank()) activeAccent
+                    else if (isNewYear) Color(0xFF132942) else SurfaceVariant,
+                )
                 .clickable(enabled = draftComment.isNotBlank()) { onSubmit() }
                 .padding(horizontal = 20.dp, vertical = 10.dp),
         ) {
             Text(
                 text = "Отправить",
-                color = if (draftComment.isNotBlank()) Background else TextSecondary,
+                color = if (draftComment.isNotBlank()) {
+                    if (isNewYear) Color(0xFF060F1B) else Background
+                } else {
+                    TextSecondary
+                },
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -755,13 +1053,31 @@ private fun CommentsBlock(
 @Composable
 private fun CircleButton(
     modifier: Modifier = Modifier,
+    isNewYear: Boolean = false,
+    lightPhase: Float = 0f,
+    isHighlighted: Boolean = false,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = modifier
             .size(44.dp)
+            .festiveTapBurst(enabled = isNewYear, cornerRadius = 22.dp)
             .clip(CircleShape)
+            .then(
+                if (isNewYear) {
+                    Modifier
+                        .background(Color(0xFF060F1B).copy(alpha = 0.62f))
+                        .arcticGlassCard(
+                            enabled = true,
+                            cornerRadius = 22.dp,
+                            highlightPhase = lightPhase,
+                            auroraAccent = isHighlighted,
+                        )
+                } else {
+                    Modifier
+                },
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -783,4 +1099,14 @@ private fun formatRating(recipe: Recipe): String {
     if (recipe.ratingsCount == 0) return "—"
     val rounded = (recipe.averageRating * 10).toInt() / 10.0
     return "$rounded"
+}
+
+fun formatDate(timestamp: Long): String {
+    if (timestamp == 0L) return ""
+    val instant = kotlin.time.Instant.fromEpochMilliseconds(timestamp)
+    val dt = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val day = dt.dayOfMonth.toString().padStart(2, '0')
+    val month = dt.monthNumber.toString().padStart(2, '0')
+    val year = dt.year
+    return "$day.$month.$year"
 }

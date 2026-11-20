@@ -1,0 +1,41 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="80dp"
+    android:viewportWidth="96"
+    android:viewportHeight="80">
+
+    <!-- Тень под отворотом -->
+    <path
+        android:fillColor="#4C0519"
+        android:fillAlpha="0.55"
+        android:pathData="M20,48C34,42 54,42 68,49L66,54C52,48 34,48 20,54Z" />
+
+    <!-- Основной купол колпака (глубокий ягодно-бордовый) -->
+    <path
+        android:fillColor="#BE123C"
+        android:pathData="M18,52C21,24 44,12 66,19C78,23 84,35 83,49L74,50C72,38 65,33 56,35C62,40 65,46 65,52Z" />
+
+    <!-- Лёгкий блик на левом склоне -->
+    <path
+        android:fillColor="#FDA4AF"
+        android:fillAlpha="0.28"
+        android:pathData="M23,45C26,26 43,17 59,21C45,23 33,31 28,45Z" />
+
+    <!-- Мягкая опушка -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M17,48L66,48A6.5,6.5 0,0 1,72.5 54.5L72.5,54.5A6.5,6.5 0,0 1,66 61L17,61A6.5,6.5 0,0 1,10.5 54.5L10.5,54.5A6.5,6.5 0,0 1,17 48z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M18,49L65,49A4,4 0,0 1,69 53L69,53A2,2 0,0 1,67 55L18,55A2,2 0,0 1,16 53L16,53A2,2 0,0 1,18 49z" />
+
+    <!-- Аккуратный помпон -->
+    <path
+        android:fillColor="#CBD5E1"
+        android:pathData="M80,43A7.5,7.5 0,1 1,80 58A7.5,7.5 0,1 1,80 43z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.65"
+        android:pathData="M78,45.5A3.2,3.2 0,1 1,78 51.9A3.2,3.2 0,1 1,78 45.5z" />
+</vector>

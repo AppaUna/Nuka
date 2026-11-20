@@ -13,9 +13,9 @@ actual fun createImageLoader(): ImageLoader {
         }
         .memoryCache {
             MemoryCache.Builder()
-                .maxSizePercent(PlatformContext.INSTANCE, 0.20)  // 20% памяти браузера
+                .maxSizePercent(PlatformContext.INSTANCE, 0.05)
                 .build()
         }
-        .crossfade(false)   // без анимации — быстрее
+        .crossfade(false)
         .build()
 }

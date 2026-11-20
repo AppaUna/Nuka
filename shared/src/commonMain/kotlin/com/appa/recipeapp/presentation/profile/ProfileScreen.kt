@@ -86,7 +86,8 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.profile_decor
-
+import com.appa.recipeapp.ui.theme.DefaultTheme
+import com.appa.recipeapp.ui.theme.NewYearTheme
 @Composable
 fun ProfileScreen(
     viewModel: ProfileViewModel,
@@ -261,10 +262,14 @@ fun ProfileScreen(
                 item { Spacer(Modifier.height(16.dp)) }
                 item {
                     InlineThemeSelector(
-                        currentThemeId = "default",
-                        onSelect = {
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Возможно когда-нибудь сделаю")
+                        currentThemeId = state.currentThemeId,
+                        onSelect = { themeId ->
+                            if (themeId == DefaultTheme.id || themeId == NewYearTheme.id) {
+                                viewModel.selectTheme(themeId)
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Возможно когда-нибудь сделаю")
+                                }
                             }
                         },
                     )
@@ -780,10 +785,15 @@ private fun InlineThemeSelector(
         ) {
             AllThemes.forEach { theme ->
                 val isSelected = theme.id == currentThemeId
+                val isAvailable = theme.id == DefaultTheme.id || theme.id == NewYearTheme.id
 
                 Text(
                     text = theme.displayName,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                    color = when {
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        !isAvailable -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        else -> MaterialTheme.colorScheme.onBackground
+                    },
                     fontSize = 14.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier

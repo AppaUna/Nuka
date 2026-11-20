@@ -40,3 +40,22 @@ firebase-service-account.json
 .env
 *.env
 secrets/
+
+# Keys & local configs
+keystore.properties
+local.properties
+secrets.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+.env
+.env.*
+google-services.json
+GoogleService-Info.plist
+build/
+.gradle/
+.idea/
+*.iml
+.DS_Store
+kotlin-js-store/

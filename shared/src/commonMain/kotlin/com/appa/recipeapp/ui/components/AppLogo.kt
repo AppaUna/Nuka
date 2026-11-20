@@ -11,10 +11,6 @@ import org.jetbrains.compose.resources.painterResource
 import recipeapp.shared.generated.resources.Res
 import recipeapp.shared.generated.resources.logo
 
-/**
- * Логотип приложения — Nuka-Cola.
- * Используется в шапках Home, Favorites, Profile.
- */
 @Composable
 fun AppLogo(
     size: Dp = 44.dp,

@@ -2,6 +2,7 @@ package com.appa.recipeapp.presentation.editor
 
 import io.github.vinceglb.filekit.PlatformFile
 import kotlinx.serialization.Serializable
+import androidx.compose.foundation.text.input.TextFieldState
 
 @Serializable
 data class IngredientDraft(
@@ -86,6 +87,25 @@ data class EditorState(
     val savedRecipeId: String? = null,
     @kotlinx.serialization.Transient
     val isDraftRestored: Boolean = false,
+
+    // Текстовые поля с TextFieldState (не сериализуются, живут только в UI)
+    @kotlinx.serialization.Transient
+    val titleField: TextFieldState = TextFieldState(),
+
+    @kotlinx.serialization.Transient
+    val descriptionField: TextFieldState = TextFieldState(),
+
+    @kotlinx.serialization.Transient
+    val cookingTimeField: TextFieldState = TextFieldState(),
+
+    @kotlinx.serialization.Transient
+    val notesField: TextFieldState = TextFieldState(),
+
+    @kotlinx.serialization.Transient
+    val newTagField: TextFieldState = TextFieldState(),
+
+    @kotlinx.serialization.Transient
+    val musicNoteField: TextFieldState = TextFieldState(),
 ) {
     val screenTitle: String
         get() = if (recipeId == null) "Новый рецепт" else "Редактирование"

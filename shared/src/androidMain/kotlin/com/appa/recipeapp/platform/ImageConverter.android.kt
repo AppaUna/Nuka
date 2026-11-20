@@ -50,3 +50,11 @@ actual fun bytesToImageBitmap(bytes: ByteArray): ImageBitmap? {
         null
     }
 }
+
+actual suspend fun imageBitmapToJpegBytesAsync(image: ImageBitmap): ByteArray? {
+    return imageBitmapToJpegBytes(image)
+}
+
+actual suspend fun imageBitmapToWebpBytesAsync(image: ImageBitmap, quality: Int): ByteArray? {
+    return imageBitmapToWebpBytes(image, quality)
+}

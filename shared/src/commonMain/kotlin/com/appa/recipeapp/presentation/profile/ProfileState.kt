@@ -13,6 +13,7 @@ data class ProfileState(
     val isMyRecipesExpanded: Boolean = false,
     val isPersonalizationExpanded: Boolean = false,
     val selectedNameColor: String = "#F5A623",
+    val currentThemeId: String = "default",
     val isEditingName: Boolean = false,
     val nameDraft: String = "",
     val isLoading: Boolean = true,

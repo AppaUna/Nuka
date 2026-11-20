@@ -4,6 +4,8 @@ package com.appa.recipeapp.navigation
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +51,7 @@ import androidx.navigation.navArgument
 import androidx.savedstate.read
 import com.appa.recipeapp.data.repository.RecipeRepository
 import com.appa.recipeapp.data.repository.SupabaseAuthRepository
+import com.appa.recipeapp.data.repository.ThemeRepository
 import com.appa.recipeapp.data.repository.UserPreferencesRepository
 import com.appa.recipeapp.platform.PlatformBackHandler
 import com.appa.recipeapp.presentation.auth.AuthScreen
@@ -64,18 +68,19 @@ import com.appa.recipeapp.presentation.profile.ProfileScreen
 import com.appa.recipeapp.presentation.profile.ProfileViewModel
 import com.appa.recipeapp.ui.theme.Accent
 import com.appa.recipeapp.ui.theme.Background
+import com.appa.recipeapp.ui.theme.NewYearTheme
 import com.appa.recipeapp.ui.theme.TextPrimary
 import com.appa.recipeapp.ui.theme.TextSecondary
 import com.russhwolf.settings.Settings
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 
 @Composable
 fun AppNavHost(initialUrl: String = "/") {
     val authRepository: SupabaseAuthRepository = koinInject()
     val settings: Settings = koinInject()
+    val themeRepository: ThemeRepository = koinInject()
+    val isNewYear = themeRepository.currentTheme.collectAsState().value.id == NewYearTheme.id
 
     var showDraftDialog by remember { mutableStateOf(false) }
 
@@ -109,6 +114,7 @@ fun AppNavHost(initialUrl: String = "/") {
         bottomBar = {
             if (showBottomBar) {
                 AppBottomBar(
+                    isNewYear = isNewYear,
                     currentRoute = currentRoute,
                     onNavigate = { route ->
                         navController.navigate(route.route) {
@@ -180,11 +186,13 @@ fun AppNavHost(initialUrl: String = "/") {
                 composable(Routes.Profile.route) {
                     val repository: RecipeRepository = koinInject()
                     val userPreferences: UserPreferencesRepository = koinInject()
+                    val profileThemeRepository: ThemeRepository = koinInject()
                     val viewModel = remember {
                         ProfileViewModel(
                             repository = repository,
                             authRepository = authRepository,
                             userPreferences = userPreferences,
+                            themeRepository = profileThemeRepository,
                             onLogout = {
                                 navController.navigate(Routes.Auth.route) {
                                     popUpTo(0) { inclusive = true }
